@@ -1,4 +1,14 @@
 modules:
+  graph:smartLink:
+    - key: vitareq-requirement-smartlink
+      icon: https://vitareq.vercel.app/favicon.ico
+      name: Vitareq Requirement
+      function: smartlink-resolver
+      domains:
+        - vitareq.vercel.app
+      subdomains: false
+      patterns:
+        - https:\/\/vitareq\.vercel\.app\/requirements\/[A-Za-z0-9_-]+
   jira:issueContext:
     - key: vitareq-forge-hello-world-issue-context
       resource: main
@@ -13,6 +23,11 @@ modules:
   function:
     - key: resolver
       handler: index.handler
+      providers:
+        auth:
+          - vitareq
+    - key: smartlink-resolver
+      handler: smartlink.handler
       providers:
         auth:
           - vitareq
