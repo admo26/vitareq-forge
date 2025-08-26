@@ -27,6 +27,8 @@ permissions:
       backend:
         - address: https://dev-yfve51b1ewip55b8.us.auth0.com
         - address: https://vitareq.vercel.app
+      client:
+        - address: https://vitareq.vercel.app
   scopes: []
 resources:
   - key: main
