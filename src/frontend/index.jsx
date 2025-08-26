@@ -23,6 +23,7 @@ const App = () => {
       owner,
       dueDate,
       url,
+      web_url,
       createdAt,
       updatedAt,
       id,
@@ -51,11 +52,11 @@ const App = () => {
     return (
       <Stack space="space.200" alignInline="start">
         <Heading size="small">
-          {url ? (
-            <Link href={String(url)}>{headingText}</Link>
+          {(() => { const linkHref = web_url || url; return linkHref ? (
+            <Link href={String(linkHref)}>{headingText}</Link>
           ) : (
             headingText
-          )}
+          ); })()}
         </Heading>
         {status && (
           <Lozenge appearance={getLozengeAppearance(status)} isBold>
