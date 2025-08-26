@@ -1,0 +1,77 @@
+modules:
+  jira:issueContext:
+    - key: vitareq-forge-hello-world-issue-context
+      resource: main
+      resolver:
+        function: resolver
+      render: native
+      title: Vitareq
+      description: An issue context for linked requirements.
+      label: Requirement
+      dynamicProperties:
+        function: dynamic-props
+  function:
+    - key: resolver
+      handler: index.handler
+      providers:
+        auth:
+          - vitareq
+    - key: dynamic-props
+      handler: dynamic.handler
+      providers:
+        auth:
+          - vitareq
+permissions:
+  external:
+    fetch:
+      backend:
+        - address: https://dev-yfve51b1ewip55b8.us.auth0.com
+        - address: https://vitareq.vercel.app
+  scopes: []
+resources:
+  - key: main
+    path: src/frontend/index.jsx
+providers:
+  auth:
+    - key: vitareq
+      name: Vitareq
+      scopes:
+        - 'openid'
+        - 'profile'
+        - 'email'
+        - 'offline_access'
+      type: oauth2
+      clientId: FGMiI81z8Sobv06TMZ4QsrSCUDTLO6gz
+      remotes:
+        - vitareq-api
+      bearerMethod: authorization-header
+      actions:
+        authorization:
+          remote: vitareq-forge-auth-apis
+          path: /authorize
+          queryParameters:
+            audience: 'https://vitareq.api'
+        exchange:
+          remote: vitareq-forge-auth-apis
+          path: /oauth/token
+        revokeToken:
+          remote: vitareq-forge-auth-apis
+          path: /oauth/token
+        retrieveProfile:
+          remote: vitareq-forge-auth-apis
+          path: /userinfo
+          resolvers:
+            id: sub
+            displayName: name
+            avatarUrl: picture
+remotes:
+  - key: vitareq-forge-auth-apis
+    baseUrl: https://dev-yfve51b1ewip55b8.us.auth0.com
+  - key: vitareq-api
+    baseUrl: https://vitareq.vercel.app
+app:
+  runtime:
+    name: nodejs22.x
+    memoryMB: 256
+    architecture: arm64
+  id: ari:cloud:ecosystem::app/6e5eee03-b1f6-4e95-bc8f-6c58a5b22095
