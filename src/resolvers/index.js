@@ -76,6 +76,9 @@ resolver.define('getText', async (req) => {
   const contentType = response.headers.get('content-type') || '';
 
   if (!response.ok) {
+    if (response.status === 404) {
+      return { error: 'No requirement found' };
+    }
     const errorBody = await response.text();
     console.error('Vitareq API error', response.status, errorBody, 'IssueKey:', issueKey);
     return { error: `Error fetching requirements (${response.status})` };
@@ -298,6 +301,73 @@ resolver.define('fetchRequirementsCC', async () => {
   } catch (e) {
     console.error('[fetchRequirementsCC] error', e?.message || e, e?.stack);
     return { success: false, error: e?.message || 'Failed to fetch requirements' };
+  }
+});
+
+resolver.define('listRequirements', async () => {
+  try {
+    const vitareq = api.asUser().withProvider('vitareq', 'vitareq-api');
+    if (!(await vitareq.hasCredentials())) {
+      await vitareq.requestCredentials();
+    }
+    const resp = await vitareq.fetch(`/api/requirements`, {
+      headers: { Accept: 'application/json' },
+    });
+    if (!resp.ok) {
+      const errorBody = await resp.text();
+      console.error('listRequirements error', resp.status, errorBody);
+      return { success: false, error: `Failed (${resp.status})` };
+    }
+    const contentType = resp.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+      return { success: false, error: 'Unexpected response' };
+    }
+    const data = await resp.json();
+    const arr = Array.isArray(data) ? data : (Array.isArray(data?.requirements) ? data.requirements : []);
+    const items = arr.map((r) => ({
+      id: r?.id ?? r?.requirementNumber ?? r?.key,
+      title: r?.title ?? r?.name ?? r?.requirementNumber ?? 'Requirement',
+      requirementNumber: r?.requirementNumber,
+    })).filter((x) => !!x.id);
+    return { success: true, items };
+  } catch (e) {
+    console.error('listRequirements exception', e);
+    return { success: false, error: 'Error' };
+  }
+});
+
+resolver.define('linkRequirement', async (req) => {
+  try {
+    const requirementId = req?.payload?.requirementId;
+    const issueKey = req?.context?.extension?.issue?.key
+      ?? req?.context?.extension?.issueKey
+      ?? req?.context?.issue?.key;
+    if (!requirementId) {
+      return { success: false, error: 'requirementId is required' };
+    }
+    if (!issueKey) {
+      return { success: false, error: 'Issue key unavailable' };
+    }
+    const vitareq = api.asUser().withProvider('vitareq', 'vitareq-api');
+    if (!(await vitareq.hasCredentials())) {
+      await vitareq.requestCredentials();
+    }
+    const resp = await vitareq.fetch(`/api/requirements/${encodeURIComponent(requirementId)}`, {
+      method: 'PUT',
+      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jiraKey: issueKey }),
+    });
+    const ct = resp.headers.get('content-type') || '';
+    if (!resp.ok) {
+      const body = ct.includes('application/json') ? JSON.stringify(await resp.json()) : await resp.text();
+      console.error('linkRequirement error', resp.status, body);
+      return { success: false, error: `Failed (${resp.status})` };
+    }
+    const updated = ct.includes('application/json') ? await resp.json() : null;
+    return { success: true, requirement: updated };
+  } catch (e) {
+    console.error('linkRequirement exception', e);
+    return { success: false, error: 'Error' };
   }
 });
 

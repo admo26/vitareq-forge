@@ -1,5 +1,14 @@
 import api from "@forge/api";
 
+function normalizeStatusDisplay(value) {
+  if (!value) return value;
+  const s = String(value).replace(/_/g, ' ').trim();
+  return s
+    .split(/\s+/)
+    .map((w) => w ? (w[0].toUpperCase() + w.slice(1).toLowerCase()) : w)
+    .join(' ');
+}
+
 function mapRequirementToEntity(requirement) {
   const id = requirement.id || requirement.requirementNumber || requirement.url;
   const displayName = requirement.title || requirement.requirementNumber || "Requirement";
@@ -18,7 +27,7 @@ function mapRequirementToEntity(requirement) {
     lastUpdatedAt,
     thumbnail: { externalUrl: 'https://vitareq.vercel.app/requirement-icon.png' },
     "atlassian:work-item": {
-      status: requirement.status || undefined,
+      status: normalizeStatusDisplay(requirement.status) || undefined,
       dueDate: requirement.dueDate || undefined,
       // Additional optional fields like assignee, project, team can be added later
     },

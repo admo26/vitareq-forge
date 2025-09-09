@@ -11,7 +11,7 @@ modules:
   action:
     - key: vitareq-fetch-requirements
       name: Fetch Requirements
-      description: Retrieve VitaReqrequirements for a Jira issue key.
+      description: Retrieve requirements for a Jira issue key.
       function: rovo-handler
       actionVerb: GET
       inputs:

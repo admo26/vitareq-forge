@@ -1,15 +1,31 @@
 import React, { useEffect, useState } from 'react';
-import ForgeReconciler, { Text, Heading, SectionMessage, Link, Lozenge, Stack } from '@forge/react';
+import ForgeReconciler, { Text, Heading, SectionMessage, Link, Lozenge, Stack, Select, Button } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
 const App = () => {
   const [data, setData] = useState(null);
+  const [allReqs, setAllReqs] = useState([]);
+  const [selectedOption, setSelectedOption] = useState(null);
+  const [linking, setLinking] = useState(false);
   useEffect(() => {
     invoke('getText', { example: 'my-invoke-variable' }).then((result) => {
       console.log('Requirement from resolver:', result);
       setData(result);
     });
   }, []);
+
+  // Auto-load requirements when no requirement is linked
+  useEffect(() => {
+    const isNoReq = data && typeof data === 'object' && 'error' in data && String(data.error).toLowerCase().includes('no requirement');
+    if (isNoReq && allReqs.length === 0) {
+      (async () => {
+        const res = await invoke('listRequirements');
+        if (res?.success && Array.isArray(res.items)) {
+          setAllReqs(res.items);
+        }
+      })();
+    }
+  }, [data, allReqs.length]);
   const RequirementView = ({ req }) => {
     if (!req || typeof req !== 'object') {
       return <Text>Invalid requirement data</Text>;
@@ -83,13 +99,44 @@ const App = () => {
   return (
     <>
       {!data && <Text>Loading...</Text>}
-      {data && typeof data === 'object' && 'error' in data && (
+      {data && typeof data === 'object' && 'error' in data && !String(data.error).toLowerCase().includes('no requirement') && (
         <SectionMessage title="Failed to load" appearance="error">
           <Text>{String(data.error)}</Text>
         </SectionMessage>
       )}
       {data && typeof data === 'object' && !('error' in data) && (
         <RequirementView req={data} />
+      )}
+      {data && typeof data === 'object' && 'error' in data && String(data.error).toLowerCase().includes('no requirement') && (
+        <Stack space="space.150" alignInline="start">
+          <Select
+            value={selectedOption}
+            onChange={(opt) => setSelectedOption(opt && typeof opt === 'object' && 'value' in opt ? opt : null)}
+            options={allReqs.map(r => ({ label: `${r.requirementNumber ? r.requirementNumber + ' — ' : ''}${r.title}`, value: r.id }))}
+            placeholder={allReqs.length ? 'Select a requirement' : 'Click Load requirements'}
+            isDisabled={allReqs.length === 0}
+            style={{ width: '100%' }}
+          />
+          <Button
+            appearance="primary"
+            isDisabled={!selectedOption || linking}
+            onClick={async () => {
+              try {
+                setLinking(true);
+                const res = await invoke('linkRequirement', { requirementId: selectedOption.value });
+                if (res?.success) {
+                  // Refresh the current view
+                  const refreshed = await invoke('getText');
+                  setData(refreshed);
+                }
+              } finally {
+                setLinking(false);
+              }
+            }}
+          >
+            {linking ? 'Linking…' : 'Link'}
+          </Button>
+        </Stack>
       )}
       {data && typeof data !== 'object' && (
         <Text>{String(data)}</Text>
