@@ -1,7 +1,75 @@
 modules:
+  rovo:agent:
+    - key: vitareq-requirements-agent
+      name: Vitareq Requirements Agent
+      description: Fetches requirements linked to Jira issues.
+      prompt: You are the Vitareq Requirements Agent. You can fetch requirements linked to a Jira issue key, create new requirements (title, optional description and status), and update existing requirements by id (title, description, status). Use the Vitareq API via the configured OAuth provider and return concise, user-friendly results.
+      actions:
+        - vitareq-fetch-requirements
+        - vitareq-create-requirement
+        - vitareq-update-requirement
+  action:
+    - key: vitareq-fetch-requirements
+      name: Fetch Requirements
+      description: Retrieve VitaReqrequirements for a Jira issue key.
+      function: rovo-handler
+      actionVerb: GET
+      inputs:
+        jiraKey:
+          title: Jira Issue Key
+          type: string
+          required: true
+          description: Jira issue key used to fetch linked requirements.
+    - key: vitareq-create-requirement
+      name: Create Requirement
+      description: Create a new requirement in Vitareq.
+      function: rovo-create-handler
+      actionVerb: CREATE
+      inputs:
+        title:
+          title: Title
+          type: string
+          required: true
+          description: Requirement title
+        description:
+          title: Description
+          type: string
+          required: false
+          description: Requirement description
+        status:
+          title: Status
+          type: string
+          required: false
+          description: Initial status e.g. DRAFT
+    - key: vitareq-update-requirement
+      name: Update Requirement
+      description: Update an existing requirement in Vitareq.
+      function: rovo-update-handler
+      actionVerb: UPDATE
+      inputs:
+        id:
+          title: Requirement ID
+          type: string
+          required: true
+          description: The requirement ID to update
+        title:
+          title: Title
+          type: string
+          required: false
+          description: New title for the requirement
+        description:
+          title: Description
+          type: string
+          required: false
+          description: New description for the requirement
+        status:
+          title: Status
+          type: string
+          required: false
+          description: New status for the requirement (e.g. DRAFT)
   graph:smartLink:
     - key: vitareq-requirement-smartlink
-      icon: https://vitareq.vercel.app/favicon.ico
+      icon: resource:images;vitafleet-glyph.png
       name: Vitareq Requirement
       function: smartlink-resolver
       domains:
@@ -9,6 +77,42 @@ modules:
       subdomains: false
       patterns:
         - https:\/\/vitareq\.vercel\.app\/requirements\/[A-Za-z0-9_-]+
+  graph:connector:
+    - key: vitareq-connector
+      name: Vitareq Connector
+      icons:
+        light: https://vitareq.vercel.app/vitafleet-glyph.png
+        dark: https://vitareq.vercel.app/vitafleet-glyph.png
+#        light: resource:images;vitafleet-glyph.png
+#        dark: resource:images;vitafleet-glyph.png
+      objectTypes:
+        - atlassian:document
+        - atlassian:work-item
+      auth:
+        provider: vitareq
+      datasource:
+        formConfiguration:
+          instructions:
+            - 'Enter you VitaReq client id and secret'
+          form:
+            - key: vitareq-auth
+              type: header
+              title: VitaReq Credentials
+              description: Provide the client credentials used to access VitaReq APIs.
+              properties:
+                - key: clientId
+                  label: Client ID
+                  type: string
+                  isRequired: true
+                - key: clientSecret
+                  label: Client Secret
+                  type: string
+                  isRequired: true
+                  isSensitive: true
+          validateConnection:
+            function: connector-validate
+        onConnectionChange:
+          function: connector-on-change         
   jira:issueContext:
     - key: vitareq-forge-hello-world-issue-context
       resource: main
@@ -20,6 +124,14 @@ modules:
       label: Requirement
       dynamicProperties:
         function: dynamic-props
+  jira:adminPage:
+    - key: vitareq-admin
+      resource: admin
+      resolver:
+        function: resolver
+      render: native
+      title: Vitareq Admin
+      description: Import mock requirements into Teamwork Graph
   function:
     - key: resolver
       handler: index.handler
@@ -36,6 +148,25 @@ modules:
       providers:
         auth:
           - vitareq
+    - key: rovo-handler
+      handler: rovo.fetchRequirements
+      providers:
+        auth:
+          - vitareq
+    - key: rovo-create-handler
+      handler: rovo.createRequirement
+      providers:
+        auth:
+          - vitareq
+    - key: rovo-update-handler
+      handler: rovo.updateRequirement
+      providers:
+        auth:
+          - vitareq
+    - key: connector-on-change
+      handler: connector.onConnectionChange
+    - key: connector-validate
+      handler: connector.validateConnection
 permissions:
   external:
     fetch:
@@ -44,10 +175,18 @@ permissions:
         - address: https://vitareq.vercel.app
       client:
         - address: https://vitareq.vercel.app
-  scopes: []
+  scopes: 
+    - read:chat:rovo
+    - write:object:jira
+    - read:object:jira
+    - delete:object:jira
 resources:
   - key: main
     path: src/frontend/index.jsx
+  - key: images
+    path: resources
+  - key: admin
+    path: src/frontend/admin.jsx
 providers:
   auth:
     - key: vitareq

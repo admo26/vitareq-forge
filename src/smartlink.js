@@ -16,6 +16,7 @@ function mapRequirementToEntity(requirement) {
     url,
     createdAt,
     lastUpdatedAt,
+    thumbnail: { externalUrl: 'https://vitareq.vercel.app/requirement-icon.png' },
     "atlassian:work-item": {
       status: requirement.status || undefined,
       dueDate: requirement.dueDate || undefined,
