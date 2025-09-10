@@ -1,19 +1,21 @@
 import api from "@forge/api";
+import { kvs } from '@forge/kvs';
 
 const VITAREQ_BASE = 'https://vitareq.vercel.app';
 const AUTH0_TOKEN_URL = 'https://dev-yfve51b1ewip55b8.us.auth0.com/oauth/token';
 const AUTH0_AUDIENCE = 'https://vitareq.api';
-const AUTH0_CLIENT_ID = 'FGMiI81z8Sobv06TMZ4QsrSCUDTLO6gz';
+// client id is stored in kvs as 'vitareq:active:clientId'
 
 async function getClientCredentialsAccessToken() {
-  const clientSecret = process.env.CLIENT_SECRET;
-  if (!clientSecret) {
-    console.warn('[rovo] CLIENT_SECRET missing; cannot use client-credentials fallback');
+  const clientId = await kvs.getSecret('vitareq:active:clientId');
+  const clientSecret = await kvs.getSecret('vitareq:active:clientSecret');
+  if (!clientId || !clientSecret) {
+    console.warn('[rovo] client credentials missing in KVS; cannot use client-credentials fallback');
     return undefined;
   }
   const form = new URLSearchParams();
   form.set('grant_type', 'client_credentials');
-  form.set('client_id', AUTH0_CLIENT_ID);
+  form.set('client_id', clientId);
   form.set('client_secret', clientSecret);
   form.set('audience', AUTH0_AUDIENCE);
   const tokenResp = await api.fetch(AUTH0_TOKEN_URL, {
@@ -53,12 +55,12 @@ export async function fetchRequirements(payload, context) {
     console.log("[rovo.fetchRequirements] hasCredentials:", hasCreds);
     if (!hasCreds) {
       console.log("[rovo.fetchRequirements] no user creds available; attempting client-credentials fallback");
-      const clientId = 'FGMiI81z8Sobv06TMZ4QsrSCUDTLO6gz';
-      const clientSecret = process.env.CLIENT_SECRET;
+      const clientId = await kvs.getSecret('vitareq:active:clientId');
+      const clientSecret = await kvs.getSecret('vitareq:active:clientSecret');
       const tokenUrl = 'https://dev-yfve51b1ewip55b8.us.auth0.com/oauth/token';
       const audience = 'https://vitareq.api';
-      if (!clientSecret) {
-        console.warn('[rovo.fetchRequirements] CLIENT_SECRET missing; cannot use fallback. Returning auth required.');
+      if (!clientId || !clientSecret) {
+        console.warn('[rovo.fetchRequirements] client credentials missing in KVS; cannot use fallback. Returning auth required.');
         return { output: 'Authentication required. Please connect Vitareq or set CLIENT_SECRET for fallback.', data: [] };
       }
       try {

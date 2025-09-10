@@ -89,10 +89,8 @@ modules:
     - key: vitareq-connector
       name: Vitareq Connector
       icons:
-        light: https://vitareq.vercel.app/vitafleet-glyph.png
-        dark: https://vitareq.vercel.app/vitafleet-glyph.png
-#        light: resource:images;vitafleet-glyph.png
-#        dark: resource:images;vitafleet-glyph.png
+        light: resource:images;vitafleet-glyph.png
+        dark: resource:images;vitafleet-glyph.png
       objectTypes:
         - atlassian:document
         - atlassian:work-item

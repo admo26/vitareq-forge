@@ -159,17 +159,17 @@ const AdminApp = () => {
       )}
       <Text>Import Vitareq requirements as work items into Teamwork Graph.</Text>
       <Inline space="space.100" alignBlock="center">
+        <Button onClick={onFetchRequirementsCC} isDisabled={ccLoading} appearance="primary">
+          {ccLoading ? 'Fetching…' : 'Fetch requirements'}
+        </Button>
         <Button onClick={onImport} isDisabled={importing} appearance="primary">
           {importing ? 'Importing…' : 'Import'}
-        </Button>
-        <Button onClick={onFetchRequirementsCC} isDisabled={ccLoading} appearance="primary">
-          {ccLoading ? 'Fetching…' : 'Fetch requirements (CC)'}
         </Button>
         <Button onClick={onDeleteImported} isDisabled={deleting} appearance="danger">
           {deleting ? 'Deleting…' : 'Delete imported'}
         </Button>
       </Inline>
-      <Heading size="small">Lookup by External ID</Heading>
+      <Heading size="small">Fetch from TWG by External ID (requirementID)</Heading>
       <Stack space="space.100" alignInline="start">
         <Label labelFor="externalId">External ID</Label>
         <Textfield
@@ -228,7 +228,9 @@ const AdminApp = () => {
       {result && result.success && (
         <SectionMessage title="Import complete" appearance="confirmation">
           <Stack space="space.150" alignInline="start">
-            <Text>Imported: {String(result.results?.accepted?.length || 0)}</Text>
+            <Text>
+              Imported: {String((result.results?.accepted?.length || 0) + (result.results?.validObjects?.length || 0))} of {String(Array.isArray(result?.objects) ? result.objects.length : ((result?.results?.validObjects?.length || 0) + (result?.results?.accepted?.length || 0)))}
+            </Text>
             {result.results?.accepted && result.results.accepted.length > 0 && (
               <Box>
                 <Heading size="xsmall">Accepted</Heading>

@@ -119,57 +119,96 @@ resolver.define('importRequirements', async () => {
     const baseUpdateSeq = Date.now();
     console.log('[importRequirements] timestamps', { nowIso, baseUpdateSeq });
 
-    const mock = [
-      {
-        id: 'req-vitc-500mg',
-        displayName: 'FDA Labeling - Vitamin C 500mg',
-        url: 'https://vitareq.vercel.app/requirements/req-vitc-500mg',
-        status: 'DRAFT',
-        description: 'Comply with 21 CFR 101.36',
-      },
-      {
-        id: 'req-gmp-0001',
-        displayName: 'GMP Record Retention',
-        url: 'https://vitareq.vercel.app/requirements/req-gmp-0001',
-        status: 'OPEN',
-        description: '21 CFR 111.605 record retention policy',
-      },
-      {
-        id: 'req-claims-structure-function',
-        displayName: 'Structure/Function Claim Disclaimer',
-        url: 'https://vitareq.vercel.app/requirements/req-claims-structure-function',
-        status: 'OPEN',
-        description: '21 CFR 101.93(b) disclaimer text',
-      },
-    ];
+    // Fetch full requirements from Vitareq via client credentials
+    const clientId = await kvs.getSecret('vitareq:active:clientId');
+    const clientSecret = await kvs.getSecret('vitareq:active:clientSecret');
+    const tokenUrl = 'https://dev-yfve51b1ewip55b8.us.auth0.com/oauth/token';
+    const audience = 'https://vitareq.api';
 
-    console.log('[importRequirements] mock seed count', mock.length);
-    const objects = mock.map((m, index) => ({
-      schemaVersion: '2.0',
-      id: m.id,
-      updateSequenceNumber: baseUpdateSeq + index,
-      displayName: m.displayName,
-      url: m.url,
-      createdAt: nowIso,
-      lastUpdatedAt: nowIso,
-      description: m.description,
-      // Use single permissions object per API expectations
-      permissions: {
-        accessControls: [
-          { principals: [{ type: 'ATLASSIAN_WORKSPACE' }] }
-        ],
-      },
-      // Required for work-item objects
-      containerKey: {
-        type: 'atlassian:space',
-        value: { entityId: 'vitareq' },
-      },
-      'atlassian:work-item': {
-        subtype: 'ISSUE',
-        status: m.status,
-        team: 'vitareq',
-      },
-    }));
+    if (!clientId || !clientSecret) {
+      console.error('[importRequirements] Missing client credentials in KVS');
+      return { success: false, error: 'Missing client credentials' };
+    }
+
+    console.log('[importRequirements] Requesting client credentials token');
+    const tokenResp = await api.fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({
+        client_id: clientId,
+        client_secret: clientSecret,
+        audience,
+        grant_type: 'client_credentials',
+      }),
+    });
+
+    if (!tokenResp.ok) {
+      const txt = await tokenResp.text();
+      console.error('[importRequirements] Token error', tokenResp.status, txt);
+      return { success: false, error: `Token request failed (${tokenResp.status})` };
+    }
+
+    const tokenJson = await tokenResp.json();
+    const accessToken = tokenJson?.access_token;
+    if (!accessToken) {
+      console.error('[importRequirements] No access_token in response', tokenJson);
+      return { success: false, error: 'No access_token in token response' };
+    }
+
+    console.log('[importRequirements] Token acquired, fetching requirements');
+    const reqResp = await api.fetch('https://vitareq.vercel.app/api/requirements', {
+      headers: { Authorization: `Bearer ${accessToken}`, Accept: 'application/json' },
+    });
+
+    const ct = reqResp.headers.get('content-type') || '';
+    if (!reqResp.ok) {
+      const txt = ct.includes('application/json') ? JSON.stringify(await reqResp.json()) : await reqResp.text();
+      console.error('[importRequirements] Vitareq API error', reqResp.status, txt);
+      return { success: false, error: `Vitareq API failed (${reqResp.status})` };
+    }
+
+    const payload = ct.includes('application/json') ? await reqResp.json() : await reqResp.text();
+    const arr = Array.isArray(payload)
+      ? payload
+      : (Array.isArray(payload?.requirements)
+        ? payload.requirements
+        : (Array.isArray(payload?.items)
+          ? payload.items
+          : (Array.isArray(payload?.data) ? payload.data : [])));
+
+    console.log('[importRequirements] fetched requirement count', arr.length);
+
+    const objects = arr.map((r, index) => {
+      const requirementId = (r?.id ?? r?.requirementNumber ?? r?.key ?? String(index)).toString();
+      const title = r?.title ?? r?.name ?? r?.requirementNumber ?? `Requirement ${requirementId}`;
+      const url = r?.url ?? `https://vitareq.vercel.app/requirements/${encodeURIComponent(requirementId)}`;
+      const status = r?.status ?? 'OPEN';
+      const description = r?.description ?? r?.text;
+      return {
+        schemaVersion: '2.0',
+        id: requirementId,
+        updateSequenceNumber: baseUpdateSeq + index,
+        displayName: title,
+        url,
+        createdAt: nowIso,
+        lastUpdatedAt: nowIso,
+        description,
+        permissions: {
+          accessControls: [
+            { principals: [{ type: 'ATLASSIAN_WORKSPACE' }] }
+          ],
+        },
+        containerKey: {
+          type: 'atlassian:space',
+          value: { entityId: 'vitareq' },
+        },
+        'atlassian:work-item': {
+          subtype: 'ISSUE',
+          status,
+          team: 'vitareq',
+        },
+      };
+    });
     console.log('[importRequirements] first object preview', objects[0]);
 
     console.log('[importRequirements] calling graph.setObjects, objects:', objects.length);
@@ -239,14 +278,14 @@ resolver.define('deleteByProperties', async () => {
 
 resolver.define('fetchRequirementsCC', async () => {
   try {
-    const clientId = 'FGMiI81z8Sobv06TMZ4QsrSCUDTLO6gz';
-    const clientSecret = process.env.CLIENT_SECRET;
+    const clientId = await kvs.getSecret('vitareq:active:clientId');
+    const clientSecret = await kvs.getSecret('vitareq:active:clientSecret');
     const tokenUrl = 'https://dev-yfve51b1ewip55b8.us.auth0.com/oauth/token';
     const audience = 'https://vitareq.api';
 
-    if (!clientSecret) {
-      console.error('[fetchRequirementsCC] Missing CLIENT_SECRET env var');
-      return { success: false, error: 'Missing CLIENT_SECRET' };
+    if (!clientId || !clientSecret) {
+      console.error('[fetchRequirementsCC] Missing client credentials in KVS');
+      return { success: false, error: 'Missing client credentials' };
     }
 
     console.log('[fetchRequirementsCC] Requesting client credentials token');
