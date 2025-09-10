@@ -1,5 +1,40 @@
 import api from "@forge/api";
 
+const VITAREQ_BASE = 'https://vitareq.vercel.app';
+const AUTH0_TOKEN_URL = 'https://dev-yfve51b1ewip55b8.us.auth0.com/oauth/token';
+const AUTH0_AUDIENCE = 'https://vitareq.api';
+const AUTH0_CLIENT_ID = 'FGMiI81z8Sobv06TMZ4QsrSCUDTLO6gz';
+
+async function getClientCredentialsAccessToken() {
+  const clientSecret = process.env.CLIENT_SECRET;
+  if (!clientSecret) {
+    console.warn('[rovo] CLIENT_SECRET missing; cannot use client-credentials fallback');
+    return undefined;
+  }
+  const form = new URLSearchParams();
+  form.set('grant_type', 'client_credentials');
+  form.set('client_id', AUTH0_CLIENT_ID);
+  form.set('client_secret', clientSecret);
+  form.set('audience', AUTH0_AUDIENCE);
+  const tokenResp = await api.fetch(AUTH0_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded', Accept: 'application/json' },
+    body: form.toString(),
+  });
+  if (!tokenResp.ok) {
+    const t = await tokenResp.text();
+    console.error('[rovo] client-credentials token error', tokenResp.status, t);
+    return undefined;
+  }
+  const tokenJson = await tokenResp.json();
+  const accessToken = tokenJson?.access_token;
+  if (!accessToken) {
+    console.error('[rovo] client-credentials token missing access_token');
+    return undefined;
+  }
+  return accessToken;
+}
+
 export async function fetchRequirements(payload, context) {
   console.log("[rovo.fetchRequirements] payload:", payload);
   console.log("[rovo.fetchRequirements] context keys:", Object.keys(context || {}));
@@ -82,9 +117,14 @@ export async function fetchRequirements(payload, context) {
 
     const url = `/api/requirements?jiraKey=${encodeURIComponent(jiraKey)}`;
     console.log("[rovo.fetchRequirements] GET", url);
-    const resp = await vitareq.fetch(url, {
-      headers: { Accept: "application/json" },
-    });
+    let resp;
+    if (hasCreds) {
+      resp = await vitareq.fetch(url, { headers: { Accept: "application/json" } });
+    } else {
+      const token = await getClientCredentialsAccessToken();
+      if (!token) return { output: 'Authentication required', data: [] };
+      resp = await api.fetch(`${VITAREQ_BASE}${url}`, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } });
+    }
 
     console.log("[rovo.fetchRequirements] status:", resp.status);
     const ct = resp.headers.get("content-type") || "";
@@ -133,9 +173,8 @@ export async function createRequirement(payload, context) {
     }
 
     const vitareq = api.asUser().withProvider("vitareq", "vitareq-api");
-    if (!(await vitareq.hasCredentials())) {
-      await vitareq.requestCredentials();
-    }
+    const hasCreds = await vitareq.hasCredentials();
+    console.log('[rovo.createRequirement] hasCredentials:', hasCreds);
 
     const body = {
       title,
@@ -143,11 +182,23 @@ export async function createRequirement(payload, context) {
       ...(status ? { status } : {}),
     };
 
-    const resp = await vitareq.fetch(`/api/requirements`, {
-      method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    let resp;
+    if (hasCreds) {
+      resp = await vitareq.fetch(`/api/requirements`, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } else {
+      console.log('[rovo.createRequirement] using client-credentials fallback');
+      const token = await getClientCredentialsAccessToken();
+      if (!token) return { output: 'Authentication required', data: [] };
+      resp = await api.fetch(`${VITAREQ_BASE}/api/requirements`, {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(body),
+      });
+    }
 
     if (!resp.ok) {
       const errorBody = await resp.text();
@@ -170,14 +221,20 @@ export async function createRequirement(payload, context) {
 }
 
 export async function updateRequirement(payload, context) {
+  console.log("[rovo.updateRequirement] payload:", payload);
+  console.log("[rovo.updateRequirement] context keys:", Object.keys(context || {}));
   try {
-    const id = payload?.inputs?.id;
-    const title = payload?.inputs?.title;
-    const description = payload?.inputs?.description;
-    const status = payload?.inputs?.status;
+    const requirementNumber = payload?.inputs?.requirementNumber
+      ?? payload?.requirementNumber
+      ?? payload?.inputs?.id
+      ?? payload?.id;
+    const title = payload?.inputs?.title ?? payload?.title;
+    const description = payload?.inputs?.description ?? payload?.description;
+    const status = payload?.inputs?.status ?? payload?.status;
+    console.log("[rovo.updateRequirement] inputs:", { requirementNumber, title, hasDescription: !!description, status });
 
-    if (!id) {
-      return { output: "id is required", data: [] };
+    if (!requirementNumber) {
+      return { output: "requirementNumber is required", data: [] };
     }
 
     const updates = {
@@ -187,37 +244,100 @@ export async function updateRequirement(payload, context) {
     };
 
     if (Object.keys(updates).length === 0) {
+      console.log("[rovo.updateRequirement] no updates provided");
       return { output: "No fields to update", data: [] };
     }
 
     const vitareq = api.asUser().withProvider("vitareq", "vitareq-api");
-    if (!(await vitareq.hasCredentials())) {
-      await vitareq.requestCredentials();
+    const hasCreds = await vitareq.hasCredentials();
+    console.log("[rovo.updateRequirement] hasCredentials:", hasCreds);
+
+    const url = `/api/requirements/${encodeURIComponent(requirementNumber)}`;
+    console.log("[rovo.updateRequirement] PUT", url, "body:", updates);
+    let resp;
+    if (hasCreds) {
+      resp = await vitareq.fetch(url, {
+        method: "PUT",
+        headers: { Accept: "application/json", "Content-Type": "application/json" },
+        body: JSON.stringify(updates),
+      });
+    } else {
+      console.log('[rovo.updateRequirement] using client-credentials fallback');
+      const token = await getClientCredentialsAccessToken();
+      if (!token) return { output: 'Authentication required', data: [] };
+      resp = await api.fetch(`${VITAREQ_BASE}${url}`, {
+        method: 'PUT',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(updates),
+      });
     }
 
-    const resp = await vitareq.fetch(`/api/requirements/${encodeURIComponent(id)}`, {
-      method: "PUT",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
-      body: JSON.stringify(updates),
-    });
-
+    console.log("[rovo.updateRequirement] status:", resp.status);
+    const ct = resp.headers.get("content-type") || "";
+    console.log("[rovo.updateRequirement] content-type:", ct);
     if (!resp.ok) {
-      const errorBody = await resp.text();
-      console.error("Rovo updateRequirement error", resp.status, errorBody);
+      const errorBody = ct.includes("application/json") ? JSON.stringify(await resp.json()) : await resp.text();
+      console.error("[rovo.updateRequirement] error", resp.status, errorBody);
       return { output: `Failed: ${resp.status}`, data: [] };
     }
 
-    const contentType = resp.headers.get("content-type") || "";
+    const contentType = ct;
     if (!contentType.includes("application/json")) {
+      const raw = await resp.text();
+      console.log("[rovo.updateRequirement] raw:", raw?.slice?.(0, 500));
       return { output: "Unexpected response", data: [] };
     }
 
     const updated = await resp.json();
-    const summary = updated?.requirementNumber || updated?.id || updated?.title || id;
+    console.log("[rovo.updateRequirement] updated keys:", Object.keys(updated || {}));
+    const summary = updated?.requirementNumber || updated?.id || updated?.title || requirementNumber;
     return { output: `Updated ${summary}`, data: updated ? [updated] : [] };
   } catch (e) {
-    console.error("Rovo updateRequirement exception", e);
+    console.error("[rovo.updateRequirement] exception", e?.message || e, e?.stack);
     return { output: "Error", data: [] };
+  }
+}
+
+export async function fetchAllRequirements(payload, context) {
+  console.log('[rovo.fetchAllRequirements] start');
+  try {
+    const vitareq = api.asUser().withProvider('vitareq', 'vitareq-api');
+    const hasCreds = await vitareq.hasCredentials();
+    console.log('[rovo.fetchAllRequirements] hasCredentials:', hasCreds);
+
+    let resp;
+    const path = `/api/requirements`;
+    if (hasCreds) {
+      resp = await vitareq.fetch(path, { headers: { Accept: 'application/json' } });
+    } else {
+      console.log('[rovo.fetchAllRequirements] using client-credentials fallback');
+      const token = await getClientCredentialsAccessToken();
+      if (!token) return { output: 'Authentication required', data: [] };
+      resp = await api.fetch(`${VITAREQ_BASE}${path}`, { headers: { Accept: 'application/json', Authorization: `Bearer ${token}` } });
+    }
+
+    console.log('[rovo.fetchAllRequirements] status:', resp.status);
+    const ct = resp.headers.get('content-type') || '';
+    if (!resp.ok) {
+      const raw = ct.includes('application/json') ? JSON.stringify(await resp.json()) : await resp.text();
+      console.error('[rovo.fetchAllRequirements] error', resp.status, raw);
+      return { output: `Failed: ${resp.status}`, data: [] };
+    }
+    if (!ct.includes('application/json')) {
+      const raw = await resp.text();
+      console.log('[rovo.fetchAllRequirements] raw:', raw?.slice?.(0, 500));
+      return { output: 'Unexpected response', data: [] };
+    }
+    const data = await resp.json();
+    const list = Array.isArray(data) ? data : (Array.isArray(data?.requirements) ? data.requirements : []);
+    console.log('[rovo.fetchAllRequirements] count:', list.length);
+    return {
+      output: `Found ${list.length} requirements`,
+      data: list,
+    };
+  } catch (e) {
+    console.error('[rovo.fetchAllRequirements] exception', e?.message || e, e?.stack);
+    return { output: 'Error', data: [] };
   }
 }
 

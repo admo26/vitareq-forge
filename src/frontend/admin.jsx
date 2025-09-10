@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import ForgeReconciler, { Box, Button, Code, CodeBlock, Heading, SectionMessage, Stack, Text, Textfield } from '@forge/react';
+import React, { useState, useEffect } from 'react';
+import ForgeReconciler, { Box, Button, Code, CodeBlock, Heading, SectionMessage, Stack, Text, Textfield, Inline, Label } from '@forge/react';
 import { invoke } from '@forge/bridge';
 
 const AdminApp = () => {
@@ -11,11 +11,16 @@ const AdminApp = () => {
   const [deleteResult, setDeleteResult] = useState(null);
   const [ccLoading, setCcLoading] = useState(false);
   const [ccResult, setCcResult] = useState(null);
+  const [creds, setCreds] = useState(null);
 
   const onImport = async () => {
     console.log('[Admin] Import clicked');
     setImporting(true);
     setResult(null);
+    // Clear other results so only current action output is shown
+    setLookup(null);
+    setDeleteResult(null);
+    setCcResult(null);
     try {
       console.log('[Admin] invoking importRequirements');
       const res = await invoke('importRequirements');
@@ -34,6 +39,10 @@ const AdminApp = () => {
     const objectType = 'atlassian:work-item';
     console.log('[Admin] Lookup clicked', { objectType, externalId });
     setLookup(null);
+    // Clear other results so only current action output is shown
+    setResult(null);
+    setDeleteResult(null);
+    setCcResult(null);
     try {
       const res = await invoke('getObjectByExternalId', { objectType, externalId });
       console.log('[Admin] lookup result', res);
@@ -48,6 +57,10 @@ const AdminApp = () => {
     console.log('[Admin] Delete imported clicked');
     setDeleting(true);
     setDeleteResult(null);
+    // Clear other results so only current action output is shown
+    setResult(null);
+    setLookup(null);
+    setCcResult(null);
     try {
       const res = await invoke('deleteByProperties');
       console.log('[Admin] delete result', res);
@@ -64,6 +77,10 @@ const AdminApp = () => {
     console.log('[Admin] Fetch requirements (client credentials)');
     setCcLoading(true);
     setCcResult(null);
+    // Clear other results so only current action output is shown
+    setResult(null);
+    setLookup(null);
+    setDeleteResult(null);
     try {
       const res = await invoke('fetchRequirementsCC');
       console.log('[Admin] CC fetch result', res);
@@ -75,6 +92,17 @@ const AdminApp = () => {
       setCcLoading(false);
     }
   };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await invoke('getActiveCredentials');
+        setCreds(res);
+      } catch (e) {
+        setCreds(null);
+      }
+    })();
+  }, []);
 
   const AcceptedList = ({ accepted, objects }) => {
     const findObject = (a) => {
@@ -120,21 +148,33 @@ const AdminApp = () => {
 
   return (
     <Stack space="space.300" alignInline="start">
-      <Heading size="medium">Vitareq Admin</Heading>
-      <Text>Import mock requirements as work items into Teamwork Graph.</Text>
-      <Button onClick={onImport} isDisabled={importing} appearance="primary">
-        {importing ? 'Importing…' : 'Import'}
-      </Button>
-      <Button onClick={onDeleteImported} isDisabled={deleting} appearance="warning">
-        {deleting ? 'Deleting…' : 'Delete imported'}
-      </Button>
-      <Button onClick={onFetchRequirementsCC} isDisabled={ccLoading} appearance="primary">
-        {ccLoading ? 'Fetching…' : 'Fetch requirements (CC)'}
-      </Button>
+      {creds && creds.success && (
+        <Stack space="space.050" alignInline="start">
+          <Heading size="xsmall">Active credentials</Heading>
+          <Label labelFor="clientId">Client ID</Label>
+          <Textfield name="clientId" id="clientId" value={String(creds.clientId || '')} isDisabled />
+          <Label labelFor="clientSecret">Client Secret</Label>
+          <Textfield name="clientSecret" id="clientSecret" value={String(creds.clientSecretMasked || '')} isDisabled />
+        </Stack>
+      )}
+      <Text>Import Vitareq requirements as work items into Teamwork Graph.</Text>
+      <Inline space="space.100" alignBlock="center">
+        <Button onClick={onImport} isDisabled={importing} appearance="primary">
+          {importing ? 'Importing…' : 'Import'}
+        </Button>
+        <Button onClick={onFetchRequirementsCC} isDisabled={ccLoading} appearance="primary">
+          {ccLoading ? 'Fetching…' : 'Fetch requirements (CC)'}
+        </Button>
+        <Button onClick={onDeleteImported} isDisabled={deleting} appearance="danger">
+          {deleting ? 'Deleting…' : 'Delete imported'}
+        </Button>
+      </Inline>
       <Heading size="small">Lookup by External ID</Heading>
       <Stack space="space.100" alignInline="start">
+        <Label labelFor="externalId">External ID</Label>
         <Textfield
           name="externalId"
+          id="externalId"
           placeholder="External ID (e.g. req-vitc-500mg)"
           value={externalId}
           onChange={(e) => setExternalId(e?.target?.value || '')}
@@ -188,6 +228,7 @@ const AdminApp = () => {
       {result && result.success && (
         <SectionMessage title="Import complete" appearance="confirmation">
           <Stack space="space.150" alignInline="start">
+            <Text>Imported: {String(result.results?.accepted?.length || 0)}</Text>
             {result.results?.accepted && result.results.accepted.length > 0 && (
               <Box>
                 <Heading size="xsmall">Accepted</Heading>

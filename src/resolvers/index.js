@@ -1,6 +1,7 @@
 import Resolver from '@forge/resolver';
 import api from "@forge/api";
 import { graph } from '@forge/teamwork-graph';
+import { kvs } from '@forge/kvs';
 
 const resolver = new Resolver();
 
@@ -368,6 +369,21 @@ resolver.define('linkRequirement', async (req) => {
   } catch (e) {
     console.error('linkRequirement exception', e);
     return { success: false, error: 'Error' };
+  }
+});
+
+resolver.define('getActiveCredentials', async () => {
+  try {
+    const clientId = await kvs.getSecret('vitareq:active:clientId');
+    const clientSecret = await kvs.getSecret('vitareq:active:clientSecret');
+    const mask = (s) => {
+      if (!s || typeof s !== 'string') return undefined;
+      return s.length > 4 ? `${s.slice(0, 2)}***${s.slice(-2)}` : '***';
+    };
+    return { success: true, clientId, clientSecretMasked: mask(clientSecret) };
+  } catch (e) {
+    console.error('[getActiveCredentials] error', e?.message || e);
+    return { success: false };
   }
 });
 

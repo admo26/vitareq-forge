@@ -3,11 +3,13 @@ modules:
     - key: vitareq-requirements-agent
       name: Vitareq Requirements Agent
       description: Fetches requirements linked to Jira issues.
-      prompt: You are the Vitareq Requirements Agent. You can fetch requirements linked to a Jira issue key, create new requirements (title, optional description and status), and update existing requirements by id (title, description, status). Use the Vitareq API via the configured OAuth provider and return concise, user-friendly results.
+      icon: resource:images;vitafleet-glyph.png
+      prompt: You are the Vitareq Requirements Agent. You can fetch requirements linked to a Jira issue key, create new requirements (title, optional description and status), and update existing requirements by id (title, description, status). Use the Vitareq API via the configured OAuth provider and return concise, user-friendly results. Never return API URLs to users. Always return the web URL to the requirement in the response. If a user asks you to update requirements related to a Jira issue key, use the Jira issue key to fetch the requirements and then update the requirements.
       actions:
         - vitareq-fetch-requirements
         - vitareq-create-requirement
         - vitareq-update-requirement
+        - vitareq-fetch-all-requirements
   action:
     - key: vitareq-fetch-requirements
       name: Fetch Requirements
@@ -47,11 +49,11 @@ modules:
       function: rovo-update-handler
       actionVerb: UPDATE
       inputs:
-        id:
-          title: Requirement ID
+        requirementNumber:
+          title: Requirement Number
           type: string
           required: true
-          description: The requirement ID to update
+          description: The requirement number to update
         title:
           title: Title
           type: string
@@ -67,6 +69,12 @@ modules:
           type: string
           required: false
           description: New status for the requirement (e.g. DRAFT)
+    - key: vitareq-fetch-all-requirements
+      name: Fetch All Requirements
+      description: Retrieve all requirements from Vitareq.
+      function: rovo-fetch-all-handler
+      actionVerb: GET
+      inputs: {}
   graph:smartLink:
     - key: vitareq-requirement-smartlink
       icon: resource:images;vitafleet-glyph.png
@@ -163,6 +171,11 @@ modules:
       providers:
         auth:
           - vitareq
+    - key: rovo-fetch-all-handler
+      handler: rovo.fetchAllRequirements
+      providers:
+        auth:
+          - vitareq
     - key: connector-on-change
       handler: connector.onConnectionChange
     - key: connector-validate
@@ -177,6 +190,7 @@ permissions:
         - address: https://vitareq.vercel.app
   scopes: 
     - read:chat:rovo
+    - storage:app
     - write:object:jira
     - read:object:jira
     - delete:object:jira
