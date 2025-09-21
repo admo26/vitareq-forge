@@ -44,7 +44,6 @@ export const handler = async (payload) => {
 
     const reqNumber = requirement?.requirementNumber ? String(requirement.requirementNumber) : "";
     const appearance = mapRequirementStatusToAppearance(requirement?.status);
-    console.log("dynamicProperties reqNumber:", reqNumber, "status:", requirement?.status, "appearance:", appearance, "for issue:", issueKey);
     return { status: { type: "lozenge", value: { label: reqNumber, type: appearance } } };
   } catch (err) {
     console.error("dynamicProperties error", err);

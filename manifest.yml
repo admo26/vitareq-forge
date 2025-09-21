@@ -1,7 +1,7 @@
 modules:
   rovo:agent:
     - key: vitareq-requirements-agent
-      name: Vitareq Requirements Agent
+      name: VitaReq Requirements Agent
       description: Fetches requirements linked to Jira issues.
       icon: resource:images;vitafleet-glyph.png
       prompt: You are the Vitareq Requirements Agent. You can fetch requirements linked to a Jira issue key, create new requirements (title, optional description and status), and update existing requirements by id (title, description, status). Use the Vitareq API via the configured OAuth provider and return concise, user-friendly results. Never return API URLs to users. Always return the web URL to the requirement in the response. If a user asks you to update requirements related to a Jira issue key, use the Jira issue key to fetch the requirements and then update the requirements.
@@ -10,6 +10,11 @@ modules:
         - vitareq-create-requirement
         - vitareq-update-requirement
         - vitareq-fetch-all-requirements
+      conversationStarters:
+        - 'Fetch requirements linked to a Jira issue key'
+        - 'Create a new requirement'
+        - 'Update an existing requirement'
+        - 'Fetch all requirements'
   action:
     - key: vitareq-fetch-requirements
       name: Fetch Requirements
@@ -87,10 +92,10 @@ modules:
         - https:\/\/vitareq\.vercel\.app\/requirements\/[A-Za-z0-9_-]+
   graph:connector:
     - key: vitareq-connector
-      name: Vitareq Connector
+      name: VitaReq
       icons:
-        light: resource:images;vitafleet-glyph.png
-        dark: resource:images;vitafleet-glyph.png
+        light: https://vitareq.vercel.app/vitafleet-glyph.png
+        dark: https://vitareq.vercel.app/vitafleet-glyph.png
       objectTypes:
         - atlassian:document
         - atlassian:work-item

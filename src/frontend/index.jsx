@@ -9,7 +9,6 @@ const App = () => {
   const [linking, setLinking] = useState(false);
   useEffect(() => {
     invoke('getText', { example: 'my-invoke-variable' }).then((result) => {
-      console.log('Requirement from resolver:', result);
       setData(result);
     });
   }, []);

@@ -5,7 +5,7 @@ import { invoke } from '@forge/bridge';
 const AdminApp = () => {
   const [importing, setImporting] = useState(false);
   const [result, setResult] = useState(null);
-  const [externalId, setExternalId] = useState('req-vitc-500mg');
+  const [externalId, setExternalId] = useState(null);
   const [lookup, setLookup] = useState(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteResult, setDeleteResult] = useState(null);
@@ -14,7 +14,6 @@ const AdminApp = () => {
   const [creds, setCreds] = useState(null);
 
   const onImport = async () => {
-    console.log('[Admin] Import clicked');
     setImporting(true);
     setResult(null);
     // Clear other results so only current action output is shown
@@ -22,22 +21,17 @@ const AdminApp = () => {
     setDeleteResult(null);
     setCcResult(null);
     try {
-      console.log('[Admin] invoking importRequirements');
       const res = await invoke('importRequirements');
-      console.log('[Admin] invoke result', res);
       setResult(res);
     } catch (e) {
-      console.error('[Admin] invoke error', e);
       setResult({ success: false, error: e?.message || 'Invocation failed' });
     } finally {
       setImporting(false);
-      console.log('[Admin] Import finished');
     }
   };
 
   const onLookup = async () => {
     const objectType = 'atlassian:work-item';
-    console.log('[Admin] Lookup clicked', { objectType, externalId });
     setLookup(null);
     // Clear other results so only current action output is shown
     setResult(null);
@@ -45,16 +39,13 @@ const AdminApp = () => {
     setCcResult(null);
     try {
       const res = await invoke('getObjectByExternalId', { objectType, externalId });
-      console.log('[Admin] lookup result', res);
       setLookup(res);
     } catch (e) {
-      console.error('[Admin] lookup error', e);
       setLookup({ success: false, error: e?.message || 'Lookup failed' });
     }
   };
 
   const onDeleteImported = async () => {
-    console.log('[Admin] Delete imported clicked');
     setDeleting(true);
     setDeleteResult(null);
     // Clear other results so only current action output is shown
@@ -63,10 +54,8 @@ const AdminApp = () => {
     setCcResult(null);
     try {
       const res = await invoke('deleteByProperties');
-      console.log('[Admin] delete result', res);
       setDeleteResult(res);
     } catch (e) {
-      console.error('[Admin] delete error', e);
       setDeleteResult({ success: false, error: e?.message || 'Delete failed' });
     } finally {
       setDeleting(false);
@@ -74,7 +63,6 @@ const AdminApp = () => {
   };
 
   const onFetchRequirementsCC = async () => {
-    console.log('[Admin] Fetch requirements (client credentials)');
     setCcLoading(true);
     setCcResult(null);
     // Clear other results so only current action output is shown
@@ -83,10 +71,8 @@ const AdminApp = () => {
     setDeleteResult(null);
     try {
       const res = await invoke('fetchRequirementsCC');
-      console.log('[Admin] CC fetch result', res);
       setCcResult(res);
     } catch (e) {
-      console.error('[Admin] CC fetch error', e);
       setCcResult({ success: false, error: e?.message || 'Fetch failed' });
     } finally {
       setCcLoading(false);

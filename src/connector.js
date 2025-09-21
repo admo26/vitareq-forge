@@ -27,16 +27,7 @@ export async function onConnectionChange(event) {
     const name = body?.name;
     const dataSourceId = body?.dataSourceId ?? body?.datasourceId;
     const configProperties = body?.configProperties || {};
-    console.log('[connector.onConnectionChange]', {
-      rootKeys,
-      payloadKeys,
-      action,
-      name,
-      dataSourceId,
-      hasProps: Object.keys(configProperties).length > 0,
-      bodyKeys: Object.keys(body || {}),
-      configProperties: redactProps(configProperties),
-    });
+    console.log('[connector.onConnectionChange]', { action, name, dataSourceId });
     // Persist or delete credentials per action
     try {
       if (action === 'CREATED' || action === 'UPDATED') {
@@ -75,7 +66,7 @@ export async function validateConnection(event) {
     const body = event?.payload?.body ?? event?.body ?? event?.payload ?? event ?? {};
     const name = body?.name;
     const props = body?.configProperties || {};
-    console.log('[connector.validateConnection] payload', { rootKeys, payloadKeys, name, keys: Object.keys(props), bodyKeys: Object.keys(body || {}), configProperties: redactProps(props) });
+    console.log('[connector.validateConnection] payload', { name });
 
     const clientId = String(props.clientId || '').trim();
     const clientSecret = String(props.clientSecret || '').trim();
@@ -84,7 +75,7 @@ export async function validateConnection(event) {
     }
     if (!clientSecret) {
       throw new Error('Client Secret is required');
-    }
+    } 
 
     // Optionally: perform a lightweight token request to validate creds
     // Skipped here to avoid external side effects during validation
