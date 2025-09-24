@@ -11,7 +11,9 @@ function normalizeStatusDisplay(value) {
 
 function mapRequirementToEntity(requirement) {
   const id = requirement.id || requirement.requirementNumber || requirement.url;
-  const displayName = requirement.title || requirement.requirementNumber || "Requirement";
+  const requirementNumber = requirement.requirementNumber || requirement.key || requirement.id;
+  const title = requirement.title || "Requirement";
+  const displayName = requirementNumber ? `[${requirementNumber}] ${title}` : title;
   const url = requirement.web_url || requirement.url;
   const createdAt = requirement.createdAt || new Date().toISOString();
   const lastUpdatedAt = requirement.updatedAt || createdAt;
