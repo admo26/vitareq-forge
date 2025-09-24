@@ -1,4 +1,4 @@
-import api from "@forge/api";
+import api, { route } from "@forge/api";
 import { kvs } from '@forge/kvs';
 
 const VITAREQ_BASE = 'https://vitareq.vercel.app';
@@ -77,7 +77,7 @@ async function fetchVitareq(path, init = {}) {
 async function getJiraBrowseUrl(issueKey) {
   if (!issueKey) return undefined;
   try {
-    const resp = await api.asUser().requestJira(`/rest/api/3/issue/${encodeURIComponent(issueKey)}`);
+    const resp = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}`);
     const ct = resp.headers.get('content-type') || '';
     if (!resp.ok) return undefined;
     const issue = ct.includes('application/json') ? await resp.json() : undefined;
@@ -284,7 +284,7 @@ export async function commentOnJiraIssue(payload, context) {
       ],
     };
 
-    const resp = await api.asUser().requestJira(`/rest/api/3/issue/${encodeURIComponent(issueKey)}/comment`, {
+    const resp = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}/comment`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify({ body: document }),
@@ -314,7 +314,7 @@ export async function fetchJiraIssue(payload, context) {
       return { output: 'issueKey is required', data: [] };
     }
 
-    const resp = await api.asUser().requestJira(`/rest/api/3/issue/${encodeURIComponent(issueKey)}`);
+    const resp = await api.asUser().requestJira(route`/rest/api/3/issue/${issueKey}`);
     const ct = resp.headers.get('content-type') || '';
     if (!resp.ok) {
       const raw = ct.includes('application/json') ? JSON.stringify(await resp.json()) : await resp.text();

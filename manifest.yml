@@ -33,7 +33,11 @@ modules:
         ----
         When you return a requirement, summarise the description to a short paragraph if it's longer than a few sentences.
         ----
-        When a user asks you to update a requirement, follow up with the user to see if they want to notify the assignee of a linked Jira issue. Do so by commenting on the Jira issue and @ mentioning the assignee.
+        When a user asks you to update a requirement, follow up with the user to see if they want to notify the assignee of a linked Jira issue. Do so by commenting on the Jira issue and @ mentioning the assignee of the Jira issue (not the requirement).
+
+        ----
+        When returning a link to a jira issue, don't use the API URL always use this base URL https://one-atlas-loes.atlassian.net/browse/ plus the issue key e.g. https://one-atlas-loes.atlassian.net/browse/VITA-1. Never return a URL with the api.atlassian.net domain.
+        ----
 
       actions:
         - vitareq-create-requirement
