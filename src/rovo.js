@@ -261,6 +261,49 @@ export async function fetchAllRequirements(payload, context) {
   }
 }
 
+export async function commentOnJiraIssue(payload, context) {
+  try {
+    const issueKey = payload?.inputs?.issueKey
+      ?? payload?.issueKey
+      ?? resolveJiraKeyFromInputs(payload, context);
+    const comment = payload?.inputs?.comment
+      ?? payload?.comment
+      ?? payload?.inputs?.body;
+    if (!issueKey) {
+      return { output: 'issueKey is required', data: [] };
+    }
+    if (!comment || !String(comment).trim()) {
+      return { output: 'comment is required', data: [] };
+    }
+
+    const document = {
+      type: 'doc',
+      version: 1,
+      content: [
+        { type: 'paragraph', content: [{ type: 'text', text: String(comment) }] },
+      ],
+    };
+
+    const resp = await api.asUser().requestJira(`/rest/api/3/issue/${encodeURIComponent(issueKey)}/comment`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ body: document }),
+    });
+    const ct = resp.headers.get('content-type') || '';
+    if (!resp.ok) {
+      const raw = ct.includes('application/json') ? JSON.stringify(await resp.json()) : await resp.text();
+      console.error('[rovo.commentOnJiraIssue] error', resp.status, raw);
+      return { output: `Failed: ${resp.status}`, data: [] };
+    }
+    const created = ct.includes('application/json') ? await resp.json() : undefined;
+
+    return { output: `Comment added to ${issueKey}`, data: created ? [created] : [] };
+  } catch (e) {
+    console.error('[rovo.commentOnJiraIssue] exception', e?.message || e, e?.stack);
+    return { output: 'Error', data: [] };
+  }
+}
+
 
 export async function fetchJiraIssue(payload, context) {
   try {

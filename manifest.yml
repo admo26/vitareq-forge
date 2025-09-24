@@ -30,11 +30,17 @@ modules:
         - Always keep output clean, concise, and visually scannable. 
         - Never use raw URLs, always wrap them as Markdown links with descriptive text.
 
+        ----
+        When you return a requirement, summarise the description to a short paragraph if it's longer than a few sentences.
+        ----
+        When a user asks you to update a requirement, follow up with the user to see if they want to notify the assignee of a linked Jira issue. Do so by commenting on the Jira issue and @ mentioning the assignee.
+
       actions:
         - vitareq-create-requirement
         - vitareq-update-requirement
         - vitareq-fetch-all-requirements
         - vitareq-fetch-jira-issue
+        - vitareq-comment-jira-issue
       conversationStarters:
         - 'Create a new requirement'
         - 'Update an existing requirement'
@@ -115,6 +121,22 @@ modules:
           type: string
           required: true
           description: The Jira issue key to fetch (e.g. PROJ-123).
+    - key: vitareq-comment-jira-issue
+      name: Comment on Jira Issue
+      description: Add a comment to a Jira issue by key.
+      function: rovo-comment-handler
+      actionVerb: CREATE
+      inputs:
+        issueKey:
+          title: Jira Issue Key
+          type: string
+          required: true
+          description: The Jira issue key to comment on (e.g. PROJ-123).
+        comment:
+          title: Comment
+          type: string
+          required: true
+          description: The comment text to add.
   graph:smartLink:
     - key: vitareq-requirement-smartlink
       icon: resource:images;vitafleet-glyph.png
@@ -219,6 +241,11 @@ modules:
       providers:
         auth:
           - vitareq
+    - key: rovo-comment-handler
+      handler: rovo.commentOnJiraIssue
+      providers:
+        auth:
+          - vitareq
     - key: connector-on-change
       handler: connector.onConnectionChange
     - key: connector-validate
@@ -238,6 +265,7 @@ permissions:
     - read:object:jira
     - delete:object:jira
     - read:jira-work
+    - write:jira-work
 resources:
   - key: main
     path: src/frontend/index.jsx
