@@ -18,8 +18,27 @@ function redactProps(obj) {
   return out;
 }
 
+const KVS_KEY_PATTERN = /^(?!\s+$)[a-zA-Z0-9:._\s-#]+$/;
+function validateKvsKey(key) {
+  const isValid = KVS_KEY_PATTERN.test(String(key || ''));
+  console.log('[connector.kvs] key validation', { key, isValid });
+  return isValid;
+}
+
 export async function onConnectionChange(event) {
   try {
+    // Log raw payload (unredacted for testing)
+    try {
+      console.log('[connector.onConnectionChange] raw event preview', {
+        eventType: typeof event,
+        rootKeys: Object.keys(event || {}),
+        payloadKeys: Object.keys(event?.payload || {}),
+        payload: event?.payload,
+        body: event?.payload?.body ?? event?.body,
+      });
+    } catch (_) {
+      // ignore logging errors
+    }
     const rootKeys = Object.keys(event || {});
     const payloadKeys = Object.keys(event?.payload || {});
     const body = event?.payload?.body ?? event?.body ?? event?.payload ?? event ?? {};
@@ -32,21 +51,55 @@ export async function onConnectionChange(event) {
     try {
       if (action === 'CREATED' || action === 'UPDATED') {
         const id = String(dataSourceId || name || 'default');
+        const clientIdKey = `vitareq:${id}:clientId`;
+        const clientSecretKey = `vitareq:${id}:clientSecret`;
+        const connectionIdKey = `vitareq:${id}:connectionId`;
+        const activeClientIdKey = 'vitareq:active:clientId';
+        const activeClientSecretKey = 'vitareq:active:clientSecret';
+        const activeConnectionIdKey = 'vitareq:active:connectionId';
+        const connectionId = String(body?.connectionId ?? body?.connection?.id ?? event?.connectionId ?? '').trim();
+        console.log('[connector.onConnectionChange] computed kvs keys', { id, clientIdKey, clientSecretKey, connectionIdKey, activeClientIdKey, activeClientSecretKey, activeConnectionIdKey, connectionId });
+
         if (configProperties?.clientId) {
-          await kvs.setSecret(`vitareq:${id}:clientId`, String(configProperties.clientId));
-          await kvs.setSecret(`vitareq:active:clientId`, String(configProperties.clientId));
+          validateKvsKey(clientIdKey);
+          validateKvsKey(activeClientIdKey);
+          await kvs.setSecret(clientIdKey, String(configProperties.clientId));
+          await kvs.setSecret(activeClientIdKey, String(configProperties.clientId));
         }
         if (configProperties?.clientSecret) {
-          await kvs.setSecret(`vitareq:${id}:clientSecret`, String(configProperties.clientSecret));
-          await kvs.setSecret(`vitareq:active:clientSecret`, String(configProperties.clientSecret));
+          validateKvsKey(clientSecretKey);
+          validateKvsKey(activeClientSecretKey);
+          await kvs.setSecret(clientSecretKey, String(configProperties.clientSecret));
+          await kvs.setSecret(activeClientSecretKey, String(configProperties.clientSecret));
+        }
+        if (connectionId) {
+          validateKvsKey(connectionIdKey);
+          validateKvsKey(activeConnectionIdKey);
+          await kvs.setSecret(connectionIdKey, connectionId);
+          await kvs.setSecret(activeConnectionIdKey, connectionId);
         }
         console.log('[connector.onConnectionChange] credentials stored for', id);
       } else if (action === 'DELETED') {
         const id = String(dataSourceId || name || 'default');
-        await kvs.deleteSecret(`vitareq:${id}:clientId`);
-        await kvs.deleteSecret(`vitareq:${id}:clientSecret`);
-        await kvs.deleteSecret(`vitareq:active:clientId`);
-        await kvs.deleteSecret(`vitareq:active:clientSecret`);
+        const clientIdKey = `vitareq:${id}:clientId`;
+        const clientSecretKey = `vitareq:${id}:clientSecret`;
+        const connectionIdKey = `vitareq:${id}:connectionId`;
+        const activeClientIdKey = 'vitareq:active:clientId';
+        const activeClientSecretKey = 'vitareq:active:clientSecret';
+        const activeConnectionIdKey = 'vitareq:active:connectionId';
+        console.log('[connector.onConnectionChange] deleting kvs keys', { id, clientIdKey, clientSecretKey, connectionIdKey, activeClientIdKey, activeClientSecretKey, activeConnectionIdKey });
+        validateKvsKey(clientIdKey);
+        validateKvsKey(clientSecretKey);
+        validateKvsKey(connectionIdKey);
+        validateKvsKey(activeClientIdKey);
+        validateKvsKey(activeClientSecretKey);
+        validateKvsKey(activeConnectionIdKey);
+        await kvs.deleteSecret(clientIdKey);
+        await kvs.deleteSecret(clientSecretKey);
+        await kvs.deleteSecret(connectionIdKey);
+        await kvs.deleteSecret(activeClientIdKey);
+        await kvs.deleteSecret(activeClientSecretKey);
+        await kvs.deleteSecret(activeConnectionIdKey);
         console.log('[connector.onConnectionChange] credentials deleted for', id);
       }
     } catch (e) {
@@ -61,6 +114,18 @@ export async function onConnectionChange(event) {
 
 export async function validateConnection(event) {
   try {
+    // Log raw payload (unredacted for testing)
+    try {
+      console.log('[connector.validateConnection] raw event preview', {
+        eventType: typeof event,
+        rootKeys: Object.keys(event || {}),
+        payloadKeys: Object.keys(event?.payload || {}),
+        payload: event?.payload,
+        body: event?.payload?.body ?? event?.body,
+      });
+    } catch (_) {
+      // ignore logging errors
+    }
     const rootKeys = Object.keys(event || {});
     const payloadKeys = Object.keys(event?.payload || {});
     const body = event?.payload?.body ?? event?.body ?? event?.payload ?? event ?? {};

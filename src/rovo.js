@@ -74,6 +74,26 @@ async function fetchVitareq(path, init = {}) {
   });
 }
 
+async function getJiraBrowseUrl(issueKey) {
+  if (!issueKey) return undefined;
+  try {
+    const resp = await api.asUser().requestJira(`/rest/api/3/issue/${encodeURIComponent(issueKey)}`);
+    const ct = resp.headers.get('content-type') || '';
+    if (!resp.ok) return undefined;
+    const issue = ct.includes('application/json') ? await resp.json() : undefined;
+    const selfUrl = issue?.self;
+    if (!selfUrl) return undefined;
+    try {
+      const u = new URL(selfUrl);
+      return `${u.protocol}//${u.host}/browse/${issue?.key || issueKey}`;
+    } catch (_) {
+      return undefined;
+    }
+  } catch (_) {
+    return undefined;
+  }
+}
+
 export async function fetchRequirements(payload, context) {
   try {
     const jiraKey = resolveJiraKeyFromInputs(payload, context);
@@ -98,6 +118,10 @@ export async function fetchRequirements(payload, context) {
 
     const data = await resp.json();
     const requirement = parseRequirementFromData(data);
+    if (requirement && requirement.jiraKey && !requirement.jiraIssueUrl) {
+      const url = await getJiraBrowseUrl(requirement.jiraKey);
+      if (url) requirement.jiraIssueUrl = url;
+    }
     return {
       output: requirement?.requirementNumber ? `Found requirement ${requirement.requirementNumber}` : "No requirement found",
       data: requirement ? [requirement] : [],
@@ -221,12 +245,76 @@ export async function fetchAllRequirements(payload, context) {
     }
     const data = await resp.json();
     const list = parseRequirementListFromData(data);
+    for (const r of list) {
+      if (r && r.jiraKey && !r.jiraIssueUrl) {
+        const url = await getJiraBrowseUrl(r.jiraKey);
+        if (url) r.jiraIssueUrl = url;
+      }
+    }
     return {
       output: `Found ${list.length} requirements`,
       data: list,
     };
   } catch (e) {
     console.error('[rovo.fetchAllRequirements] exception', e?.message || e, e?.stack);
+    return { output: 'Error', data: [] };
+  }
+}
+
+
+export async function fetchJiraIssue(payload, context) {
+  try {
+    const issueKey = payload?.inputs?.issueKey
+      ?? payload?.issueKey
+      ?? resolveJiraKeyFromInputs(payload, context);
+    if (!issueKey) {
+      return { output: 'issueKey is required', data: [] };
+    }
+
+    const resp = await api.asUser().requestJira(`/rest/api/3/issue/${encodeURIComponent(issueKey)}`);
+    const ct = resp.headers.get('content-type') || '';
+    if (!resp.ok) {
+      const raw = ct.includes('application/json') ? JSON.stringify(await resp.json()) : await resp.text();
+      console.error('[rovo.fetchJiraIssue] error', resp.status, raw);
+      return { output: `Failed: ${resp.status}`, data: [] };
+    }
+    if (!ct.includes('application/json')) {
+      await resp.text();
+      return { output: 'Unexpected response', data: [] };
+    }
+
+    const issue = await resp.json();
+    const selfUrl = issue?.self || '';
+    let base = '';
+    try {
+      if (selfUrl) {
+        const u = new URL(selfUrl);
+        base = `${u.protocol}//${u.host}`;
+      }
+    } catch (_) {
+      // ignore
+    }
+    const webUrl = base && (issue?.key || issueKey) ? `${base}/browse/${issue?.key || issueKey}` : undefined;
+
+    const summary = issue?.fields?.summary || issue?.key || issueKey;
+    const statusName = issue?.fields?.status?.name;
+    const assignee = issue?.fields?.assignee?.displayName;
+    const reporter = issue?.fields?.reporter?.displayName;
+
+    const data = {
+      id: issue?.id,
+      key: issue?.key || issueKey,
+      summary,
+      status: statusName,
+      assignee,
+      reporter,
+      url: webUrl,
+      self: selfUrl,
+    };
+
+    return { output: `Found issue ${issue?.key || issueKey}${summary ? `: ${summary}` : ''}`.trim(), data: [data] };
+  } catch (e) {
+    console.error('[rovo.fetchJiraIssue] exception', e?.message || e, e?.stack);
     return { output: 'Error', data: [] };
   }
 }

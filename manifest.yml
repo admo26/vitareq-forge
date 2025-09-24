@@ -4,14 +4,13 @@ modules:
       name: VitaReq Requirements Agent
       description: Fetches requirements linked to Jira issues.
       icon: resource:images;vitafleet-glyph.png
-      prompt: You are the Vitareq Requirements Agent. You can fetch requirements linked to a Jira issue key, create new requirements (title, optional description and status), and update existing requirements by id (title, description, status). Use the Vitareq API via the configured OAuth provider and return concise, user-friendly results. Never return API URLs to users. Always return the web URL to the requirement in the response. If a user asks you to update requirements related to a Jira issue key, use the Jira issue key to fetch the requirements and then update the requirements.
+      prompt: You are the Vitareq Requirements Agent. You can fetch requirements linked to a Jira issue key, create new requirements (title, optional description and status), and update existing requirements by id (title, description, status). Use the Vitareq API via the configured OAuth provider and return concise, user-friendly results. Never return API URLs to users. Always return the web URL to the requirement in the response. When you return requirements, also include a URL to the linked Jira issue if one exists (for example, a browse URL that opens the Jira issue). If a user asks you to update requirements related to a Jira issue key, use the Jira issue key to fetch the requirements and then update the requirements. Every time you return a Jira Issue Key also return the browse URL to the Jira issue.
       actions:
-        - vitareq-fetch-requirements
         - vitareq-create-requirement
         - vitareq-update-requirement
         - vitareq-fetch-all-requirements
+        - vitareq-fetch-jira-issue
       conversationStarters:
-        - 'Fetch requirements linked to a Jira issue key'
         - 'Create a new requirement'
         - 'Update an existing requirement'
         - 'Fetch all requirements'
@@ -80,6 +79,17 @@ modules:
       function: rovo-fetch-all-handler
       actionVerb: GET
       inputs: {}
+    - key: vitareq-fetch-jira-issue
+      name: Fetch Jira Issue
+      description: Retrieve Jira issue details by issue key.
+      function: rovo-issue-handler
+      actionVerb: GET
+      inputs:
+        issueKey:
+          title: Jira Issue Key
+          type: string
+          required: true
+          description: The Jira issue key to fetch (e.g. PROJ-123).
   graph:smartLink:
     - key: vitareq-requirement-smartlink
       icon: resource:images;vitafleet-glyph.png
@@ -179,6 +189,11 @@ modules:
       providers:
         auth:
           - vitareq
+    - key: rovo-issue-handler
+      handler: rovo.fetchJiraIssue
+      providers:
+        auth:
+          - vitareq
     - key: connector-on-change
       handler: connector.onConnectionChange
     - key: connector-validate
@@ -197,6 +212,7 @@ permissions:
     - write:object:jira
     - read:object:jira
     - delete:object:jira
+    - read:jira-work
 resources:
   - key: main
     path: src/frontend/index.jsx

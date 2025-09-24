@@ -195,8 +195,9 @@ resolver.define('importRequirements', async () => {
         description,
         permissions: {
           accessControls: [
-            { principals: [{ type: 'ATLASSIAN_WORKSPACE' }] }
+            { principals: [{ type: 'USER', id: 'google-oauth2|107406112376104028774' }] }
           ],
+          "alwaysSkipRemoteChecks": true
         },
         containerKey: {
           type: 'atlassian:space',
@@ -210,6 +211,93 @@ resolver.define('importRequirements', async () => {
       };
     });
     console.log('[importRequirements] first object preview', objects[0]);
+    // Also ensure default user exists in Teamwork Graph
+    let userResults = undefined;
+    let userMappingResults = undefined;
+    let userMappingSuccess = undefined;
+    try {
+      console.log('[importRequirements] calling graph.setUsers for default user');
+      const user = {
+        externalId: 'google-oauth2|107406112376104028774',
+        displayName: 'Adam Moore',
+        userName: 'amoore',
+        name: {
+          formatted: 'Adam Moore',
+          familyName: 'Moore',
+          givenName: 'Adam',
+        },
+        emails: [
+          { value: 'amoore@atlassian.com', primary: true },
+        ],
+      };
+      const setUsersResp = await graph.setUsers({ users: [user] });
+      userResults = setUsersResp?.results;
+      console.log('[importRequirements] setUsers response', {
+        success: setUsersResp?.success,
+        successCount: setUsersResp?.results?.success?.length,
+        failureCount: setUsersResp?.results?.failures?.length,
+        error: setUsersResp?.error,
+      });
+
+      // Map the user to email for permissions/collab
+      console.log('[importRequirements] calling graph.mapUsers for default user');
+      const mapResp = await graph.mapUsers({
+        directMappings: [
+          {
+            externalId: 'google-oauth2|107406112376104028774',
+            email: 'amoore@atlassian.com',
+            updateSequenceNumber: baseUpdateSeq,
+            updatedAt: Date.now(),
+          },
+        ],
+      });
+      userMappingResults = mapResp?.results;
+      userMappingSuccess = mapResp?.success === true;
+      console.log('[importRequirements] mapUsers response', {
+        success: mapResp?.success,
+        resultsCount: Array.isArray(mapResp?.results) ? mapResp.results.length : 0,
+        error: mapResp?.error,
+      });
+      // Emit detailed logs for mapping outcomes
+      try {
+        if (Array.isArray(mapResp?.results)) {
+          for (const r of mapResp.results) {
+            if (r?.success) {
+              console.log('[importRequirements] mapUsers success', {
+                externalId: r?.externalId,
+                accountId: r?.accountId,
+                email: r?.email,
+              });
+            } else {
+              console.warn('[importRequirements] mapUsers failure', {
+                externalId: r?.externalId,
+                error: r?.error,
+              });
+            }
+          }
+        } else if (mapResp?.results && typeof mapResp.results === 'object') {
+          const successes = Array.isArray(mapResp.results.success) ? mapResp.results.success : [];
+          const failures = Array.isArray(mapResp.results.failures) ? mapResp.results.failures : [];
+          for (const r of successes) {
+            console.log('[importRequirements] mapUsers success', {
+              externalId: r?.externalId,
+              accountId: r?.accountId,
+              email: r?.email,
+            });
+          }
+          for (const r of failures) {
+            console.warn('[importRequirements] mapUsers failure', {
+              externalId: r?.externalId,
+              error: r?.error,
+            });
+          }
+        }
+      } catch (logErr) {
+        console.error('[importRequirements] mapUsers detailed logging error', logErr?.message || logErr);
+      }
+    } catch (e) {
+      console.error('[importRequirements] setUsers error (non-fatal)', e?.message || e);
+    }
 
     console.log('[importRequirements] calling graph.setObjects, objects:', objects.length);
     const response = await graph.setObjects({
@@ -225,7 +313,7 @@ resolver.define('importRequirements', async () => {
       error: response?.error,
     });
 
-    return { success: response?.success === true, results: response?.results, objects };
+    return { success: response?.success === true, results: response?.results, objects, userResults, userMappingResults, userMappingSuccess };
   } catch (e) {
     try {
       console.error('[importRequirements] error', e?.message || e, e?.stack);
@@ -263,13 +351,95 @@ resolver.define('getObjectByExternalId', async (req) => {
   }
 });
 
+resolver.define('getUserByExternalId', async (req) => {
+  try {
+    const externalId = String(req?.payload?.externalId || '').trim();
+    console.log('[getUserByExternalId] request', { externalId });
+
+    if (!externalId) {
+      return { success: false, error: 'externalId is required' };
+    }
+
+    const response = await graph.getUserByExternalId({ externalId });
+    console.log('[getUserByExternalId] response', {
+      success: response?.success,
+      hasUser: !!response?.user,
+      error: response?.error,
+    });
+    return response;
+  } catch (e) {
+    console.error('[getUserByExternalId] error', e?.message || e, e?.stack);
+    return { success: false, error: e?.message || 'Failed to get user by external id' };
+  }
+});
+
 resolver.define('deleteByProperties', async () => {
   try {
     const request = { properties: { source: 'vitareq-forge' }, objectType: 'atlassian:work-item' };
     console.log('[deleteByProperties] request', request);
     const response = await graph.deleteObjectsByProperties(request);
+
+    // Attempt to also delete the default user by externalId
+    let userDelete = undefined;
+    try {
+      const userExternalIds = ['google-oauth2|107406112376104028774'];
+      console.log('[deleteByProperties] preparing to delete users by externalId', { userExternalIds });
+
+      // Pre-delete existence checks
+      for (const extId of userExternalIds) {
+        try {
+          const pre = await graph.getUserByExternalId({ externalId: extId });
+          console.log('[deleteByProperties] pre-delete lookup', {
+            externalId: extId,
+            success: pre?.success,
+            found: !!pre?.user,
+            error: pre?.error,
+          });
+        } catch (lookupErr) {
+          console.warn('[deleteByProperties] pre-delete lookup error', {
+            externalId: extId,
+            error: lookupErr?.message || lookupErr,
+          });
+        }
+      }
+
+      userDelete = await graph.deleteUsersByExternalId({ externalIds: userExternalIds });
+      console.log('[deleteByProperties] user delete response (summary)', {
+        success: userDelete?.success,
+        successCount: userDelete?.results?.success?.length,
+        failureCount: userDelete?.results?.failures?.length,
+        error: userDelete?.error,
+      });
+
+      // Detailed per-id results
+      try {
+        if (Array.isArray(userDelete?.results)) {
+          for (const r of userDelete.results) {
+            if (r?.statusCode && r.statusCode >= 200 && r.statusCode < 300) {
+              console.log('[deleteByProperties] user deleted', { externalId: r?.externalId, statusCode: r?.statusCode });
+            } else {
+              console.warn('[deleteByProperties] user delete failed', { externalId: r?.externalId, statusCode: r?.statusCode, error: r?.error });
+            }
+          }
+        } else {
+          const successes = Array.isArray(userDelete?.results?.success) ? userDelete.results.success : [];
+          const failures = Array.isArray(userDelete?.results?.failures) ? userDelete.results.failures : [];
+          for (const r of successes) {
+            console.log('[deleteByProperties] user deleted', { externalId: r?.externalId, statusCode: r?.statusCode });
+          }
+          for (const r of failures) {
+            console.warn('[deleteByProperties] user delete failed', { externalId: r?.externalId, statusCode: r?.statusCode, error: r?.error });
+          }
+        }
+      } catch (detailErr) {
+        console.error('[deleteByProperties] error logging user delete details', detailErr?.message || detailErr);
+      }
+    } catch (e) {
+      console.error('[deleteByProperties] user delete error (non-fatal)', e?.message || e);
+    }
+
     console.log('[deleteByProperties] response', { success: response?.success, error: response?.error });
-    return response;
+    return { ...response, userDelete };
   } catch (e) {
     console.error('[deleteByProperties] error', e?.message || e, e?.stack);
     return { success: false, error: e?.message || 'Delete failed' };
@@ -415,14 +585,46 @@ resolver.define('getActiveCredentials', async () => {
   try {
     const clientId = await kvs.getSecret('vitareq:active:clientId');
     const clientSecret = await kvs.getSecret('vitareq:active:clientSecret');
+    const connectionId = await kvs.getSecret('vitareq:active:connectionId');
     const mask = (s) => {
       if (!s || typeof s !== 'string') return undefined;
       return s.length > 4 ? `${s.slice(0, 2)}***${s.slice(-2)}` : '***';
     };
-    return { success: true, clientId, clientSecretMasked: mask(clientSecret) };
+    return { success: true, clientId, clientSecretMasked: mask(clientSecret), connectionId };
   } catch (e) {
     console.error('[getActiveCredentials] error', e?.message || e);
     return { success: false };
+  }
+});
+
+resolver.define('importUser', async () => {
+  try {
+    console.log('[importUser] start');
+    const user = {
+      externalId: 'google-oauth2|107406112376104028774',
+      displayName: 'Adam Moore',
+      userName: 'amoore',
+      name: {
+        formatted: 'Adam Moore',
+        familyName: 'Moore',
+        givenName: 'Adam'
+      },
+      emails: [
+        { value: 'amoore@atlassian.com', primary: true }
+      ]
+    };
+    console.log('[importUser] calling graph.setUsers');
+    const response = await graph.setUsers({ users: [user] });
+    console.log('[importUser] response', {
+      success: response?.success,
+      successCount: response?.results?.success?.length,
+      failureCount: response?.results?.failures?.length,
+      error: response?.error
+    });
+    return response;
+  } catch (e) {
+    console.error('[importUser] error', e?.message || e, e?.stack);
+    return { success: false, error: e?.message || 'Failed to import user' };
   }
 });
 
