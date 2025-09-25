@@ -3,18 +3,23 @@ import ForgeReconciler, { Box, Button, Code, CodeBlock, Heading, SectionMessage,
 import { invoke } from '@forge/bridge';
 
 const AdminApp = () => {
-  const [importing, setImporting] = useState(false);
+  const [importingUser, setImportingUser] = useState(false);
+  const [importingWorkspace, setImportingWorkspace] = useState(false);
   const [result, setResult] = useState(null);
   const [externalId, setExternalId] = useState(null);
   const [userExternalId, setUserExternalId] = useState('google-oauth2|107406112376104028774');
   const [userLookup, setUserLookup] = useState(null);
   const [importEntityIds, setImportEntityIds] = useState([]);
   const [lookup, setLookup] = useState(null);
+  const [lookupType, setLookupType] = useState('work-item');
+  const [lookupExternalId, setLookupExternalId] = useState('');
   const [deleting, setDeleting] = useState(false);
   const [deleteResult, setDeleteResult] = useState(null);
   const [ccLoading, setCcLoading] = useState(false);
   const [ccResult, setCcResult] = useState(null);
   const [creds, setCreds] = useState(null);
+  const [importingTestDoc, setImportingTestDoc] = useState(false);
+  const [importingTestWorkItem, setImportingTestWorkItem] = useState(false);
   const clearAllResults = () => {
     setResult(null);
     setLookup(null);
@@ -24,7 +29,7 @@ const AdminApp = () => {
   };
 
   const onImport = async () => {
-    setImporting(true);
+    setImportingUser(true);
     clearAllResults();
     try {
       const res = await invoke('importRequirements');
@@ -63,16 +68,67 @@ const AdminApp = () => {
     } catch (e) {
       setResult({ success: false, error: e?.message || 'Invocation failed' });
     } finally {
-      setImporting(false);
+      setImportingUser(false);
+    }
+  };
+
+  const onImportWorkspace = async () => {
+    setImportingWorkspace(true);
+    clearAllResults();
+    try {
+      const res = await invoke('importRequirements', { workspace: true });
+      setResult(res);
+      try {
+        const toEntityIdString = (raw) => {
+          if (!raw) return undefined;
+          if (typeof raw === 'string') return raw;
+          if (typeof raw === 'object') {
+            if (typeof raw.id === 'string') return raw.id;
+            if (typeof raw.entityId === 'string') return raw.entityId;
+          }
+          return undefined;
+        };
+        const extractAcceptedId = (a) => {
+          return (
+            toEntityIdString(a?.entityId) ||
+            toEntityIdString(a?.key?.entityId)
+          );
+        };
+        let ids = Array.isArray(res?.results?.accepted)
+          ? res.results.accepted.map(extractAcceptedId).filter(Boolean)
+          : [];
+        if (ids.length === 0 && Array.isArray(res?.objects)) {
+          ids = res.objects.map(o => o?.id).filter(Boolean).map(String);
+        }
+        const uniqueIds = Array.from(new Set(ids.map(String)));
+        setImportEntityIds(uniqueIds);
+        if (uniqueIds.length > 0) {
+          setExternalId(String(uniqueIds[0]));
+        }
+      } catch (_) {}
+    } catch (e) {
+      setResult({ success: false, error: e?.message || 'Invocation failed' });
+    } finally {
+      setImportingWorkspace(false);
     }
   };
 
   const onLookup = async () => {
-    const objectType = 'atlassian:work-item';
     clearAllResults();
     try {
-      const res = await invoke('getObjectByExternalId', { objectType, externalId });
-      setLookup(res);
+      if (lookupType === 'user') {
+        const res = await invoke('getUserByExternalId', { externalId: lookupExternalId });
+        setLookup(res);
+      } else {
+        const typeMap = {
+          'work-item': 'atlassian:work-item',
+          'document': 'atlassian:document',
+          'project': 'atlassian:project',
+        };
+        const objectType = typeMap[lookupType] || 'atlassian:work-item';
+        const res = await invoke('getObjectByExternalId', { objectType, externalId: lookupExternalId });
+        setLookup(res);
+      }
     } catch (e) {
       setLookup({ success: false, error: e?.message || 'Lookup failed' });
     }
@@ -111,6 +167,32 @@ const AdminApp = () => {
       setUserLookup(res);
     } catch (e) {
       setUserLookup({ success: false, error: e?.message || 'User lookup failed' });
+    }
+  };
+
+  const onImportTestDoc = async () => {
+    setImportingTestDoc(true);
+    clearAllResults();
+    try {
+      const res = await invoke('importTestDoc');
+      setResult(res);
+    } catch (e) {
+      setResult({ success: false, error: e?.message || 'Invocation failed' });
+    } finally {
+      setImportingTestDoc(false);
+    }
+  };
+
+  const onImportTestWorkItem = async () => {
+    setImportingTestWorkItem(true);
+    clearAllResults();
+    try {
+      const res = await invoke('importTestWorkItem');
+      setResult(res);
+    } catch (e) {
+      setResult({ success: false, error: e?.message || 'Invocation failed' });
+    } finally {
+      setImportingTestWorkItem(false);
     }
   };
 
@@ -198,59 +280,46 @@ const AdminApp = () => {
         <Button onClick={onFetchRequirementsCC} isDisabled={ccLoading} appearance="primary">
           {ccLoading ? 'Fetching…' : 'Fetch requirements'}
         </Button>
-        <Button onClick={onImport} isDisabled={importing} appearance="primary">
-          {importing ? 'Importing…' : 'Import'}
+        <Button onClick={onImport} isDisabled={importingUser} appearance="primary">
+          {importingUser ? 'Importing…' : 'Import User Perms'}
+        </Button>
+        <Button onClick={onImportWorkspace} isDisabled={importingWorkspace} appearance="primary">
+          {importingWorkspace ? 'Importing…' : 'Import Workspace Perms'}
         </Button>
         <Button onClick={onDeleteImported} isDisabled={deleting} appearance="danger">
           {deleting ? 'Deleting…' : 'Delete imported'}
         </Button>
+        <Button onClick={onImportTestDoc} isDisabled={importingTestDoc} appearance="primary">
+          {importingTestDoc ? 'Importing…' : 'Import test doc'}
+        </Button>
+        <Button onClick={onImportTestWorkItem} isDisabled={importingTestWorkItem} appearance="primary">
+          {importingTestWorkItem ? 'Importing…' : 'Import test work item'}
+        </Button>
       </Inline>
       <Inline space="space.300" alignBlock="start" alignInline="start" shouldWrap={false}>
         <Stack space="space.100" alignInline="start">
-          <Heading size="small">Fetch from TWG by External ID (requirementID)</Heading>
-          <Label labelFor="externalId">External ID</Label>
-          {Array.isArray(importEntityIds) && importEntityIds.length > 0 ? (
-            <Select
-              value={(() => {
-                const importedObjects = Array.isArray(result?.objects) ? result.objects : [];
-                const options = importEntityIds.map(id => {
-                  const obj = importedObjects.find(o => String(o.id) === String(id));
-                  const label = obj ? `${String(id)} — ${String(obj.displayName || obj.id)}` : String(id);
-                  return { label, value: id };
-                });
-                return options.find(o => String(o.value) === String(externalId)) || null;
-              })()}
-              onChange={(opt) => setExternalId(opt && typeof opt === 'object' && 'value' in opt ? opt.value : '')}
-              options={(Array.isArray(result?.objects) ? importEntityIds.map(id => {
-                const obj = result.objects.find(o => String(o.id) === String(id));
-                const label = obj ? `${String(id)} — ${String(obj.displayName || obj.id)}` : String(id);
-                return { label, value: id };
-              }) : importEntityIds.map(id => ({ label: String(id), value: id })))}
-              placeholder="Select an imported requirement"
-              style={{ width: '100%' }}
-            />
-          ) : (
-            <Textfield
-              name="externalId"
-              id="externalId"
-              placeholder="External ID (e.g. req-vitc-500mg)"
-              value={externalId}
-              onChange={(e) => setExternalId(e?.target?.value || '')}
-            />
-          )}
-          <Button onClick={onLookup} isDisabled={!externalId}>Lookup</Button>
-        </Stack>
-        <Stack space="space.100" alignInline="start">
-          <Heading size="small">Fetch User by External ID</Heading>
-          <Label labelFor="userExternalId">User External ID</Label>
-          <Textfield
-            name="userExternalId"
-            id="userExternalId"
-            placeholder="External ID (e.g. google-oauth2|107406112376104028774)"
-            value={userExternalId}
-            onChange={(e) => setUserExternalId(e?.target?.value || '')}
+          <Heading size="small">Fetch from TWG by External ID</Heading>
+          <Label labelFor="lookupType">Object Type</Label>
+          <Select
+            value={(
+              ['work-item','document','user']
+                .map(t => ({ label: t, value: t }))
+                .find(o => o.value === lookupType) || { label: 'work-item', value: 'work-item' }
+            )}
+            onChange={(opt) => setLookupType(opt && typeof opt === 'object' && 'value' in opt ? opt.value : 'work-item')}
+            options={['work-item','document','user'].map(t => ({ label: t, value: t }))}
+            placeholder="Select a type"
+            style={{ width: '100%' }}
           />
-          <Button onClick={onUserLookup} isDisabled={!userExternalId}>Lookup User</Button>
+          <Label labelFor="lookupExternalId">External ID</Label>
+          <Textfield
+            name="lookupExternalId"
+            id="lookupExternalId"
+            placeholder="External ID"
+            value={lookupExternalId}
+            onChange={(e) => setLookupExternalId(e?.target?.value || '')}
+          />
+          <Button onClick={onLookup} isDisabled={!lookupExternalId}>Lookup</Button>
         </Stack>
       </Inline>
 

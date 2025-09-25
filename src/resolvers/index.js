@@ -111,9 +111,10 @@ resolver.define('getText', async (req) => {
   return { error: 'Unexpected non-JSON response', raw: text };
 })
 
-resolver.define('importRequirements', async () => {
+resolver.define('importRequirements', async (req) => {
   try {
     console.log('[importRequirements] start');
+    const useWorkspacePermissions = req?.payload?.workspace === true;
     const now = new Date();
     const nowIso = now.toISOString();
     const baseUpdateSeq = Date.now();
@@ -178,12 +179,25 @@ resolver.define('importRequirements', async () => {
 
     console.log('[importRequirements] fetched requirement count', arr.length);
 
+    // Project ingestion removed per request
+
     const objects = arr.map((r, index) => {
       const requirementId = (r?.id ?? r?.requirementNumber ?? r?.key ?? String(index)).toString();
       const title = r?.title ?? r?.name ?? r?.requirementNumber ?? `Requirement ${requirementId}`;
       const url = r?.url ?? `https://vitareq.vercel.app/requirements/${encodeURIComponent(requirementId)}`;
       const status = r?.status ?? 'OPEN';
-      const description = r?.description ?? r?.text;
+      const description = (r?.description ?? r?.text ?? title ?? requirementId).toString();
+      const permissions = useWorkspacePermissions
+        ? {
+            accessControls: [
+              { principals: [ { type: 'ATLASSIAN_WORKSPACE' } ] }
+            ]
+          }
+        : {
+            accessControls: [
+              { principals: [ { type: 'USER', id: 'google-oauth2|107406112376104028774' } ] }
+            ]
+          };
       return {
         schemaVersion: '2.0',
         id: requirementId,
@@ -193,110 +207,105 @@ resolver.define('importRequirements', async () => {
         createdAt: nowIso,
         lastUpdatedAt: nowIso,
         description,
-        permissions: {
-          accessControls: [
-            { principals: [{ type: 'USER', id: 'google-oauth2|107406112376104028774' }] }
-          ],
-          "alwaysSkipRemoteChecks": true
-        },
-        containerKey: {
-          type: 'atlassian:space',
-          value: { entityId: 'vitareq' },
-        },
+        permissions,
+
         'atlassian:work-item': {
-          subtype: 'ISSUE',
-          status,
-          team: 'vitareq',
+          subtype: 'TASK',
+          status
         },
       };
     });
     console.log('[importRequirements] first object preview', objects[0]);
-    // Also ensure default user exists in Teamwork Graph
+    // Also ensure default user exists in Teamwork Graph (skip when workspace-level permissions are used)
     let userResults = undefined;
     let userMappingResults = undefined;
     let userMappingSuccess = undefined;
-    try {
-      console.log('[importRequirements] calling graph.setUsers for default user');
-      const user = {
-        externalId: 'google-oauth2|107406112376104028774',
-        displayName: 'Adam Moore',
-        userName: 'amoore',
-        name: {
-          formatted: 'Adam Moore',
-          familyName: 'Moore',
-          givenName: 'Adam',
-        },
-        emails: [
-          { value: 'amoore@atlassian.com', primary: true },
-        ],
-      };
-      const setUsersResp = await graph.setUsers({ users: [user] });
-      userResults = setUsersResp?.results;
-      console.log('[importRequirements] setUsers response', {
-        success: setUsersResp?.success,
-        successCount: setUsersResp?.results?.success?.length,
-        failureCount: setUsersResp?.results?.failures?.length,
-        error: setUsersResp?.error,
-      });
-
-      // Map the user to email for permissions/collab
-      console.log('[importRequirements] calling graph.mapUsers for default user');
-      const mapResp = await graph.mapUsers({
-        directMappings: [
-          {
-            externalId: 'google-oauth2|107406112376104028774',
-            email: 'amoore@atlassian.com',
-            updateSequenceNumber: baseUpdateSeq,
-            updatedAt: Date.now(),
-          },
-        ],
-      });
-      userMappingResults = mapResp?.results;
-      userMappingSuccess = mapResp?.success === true;
-      console.log('[importRequirements] mapUsers response', {
-        success: mapResp?.success,
-        resultsCount: Array.isArray(mapResp?.results) ? mapResp.results.length : 0,
-        error: mapResp?.error,
-      });
-      // Emit detailed logs for mapping outcomes
+    if (!useWorkspacePermissions) {
       try {
-        if (Array.isArray(mapResp?.results)) {
-          for (const r of mapResp.results) {
-            if (r?.success) {
+        console.log('[importRequirements] calling graph.setUsers for default user');
+        const user = {
+          externalId: 'google-oauth2|107406112376104028774',
+          displayName: 'Adam Moore',
+          userName: 'amoore',
+          name: {
+            formatted: 'Adam Moore',
+            familyName: 'Moore',
+            givenName: 'Adam',
+          },
+          emails: [
+            { value: 'amoore@atlassian.com', primary: true },
+          ],
+        };
+        const setUsersResp = await graph.setUsers({ users: [user] });
+        userResults = setUsersResp?.results;
+        console.log('[importRequirements] setUsers response', {
+          success: setUsersResp?.success,
+          successCount: setUsersResp?.results?.success?.length,
+          failureCount: setUsersResp?.results?.failures?.length,
+          error: setUsersResp?.error,
+        });
+
+        // Map the user to email for permissions/collab
+        console.log('[importRequirements] calling graph.mapUsers for default user');
+        const mapResp = await graph.mapUsers({
+          directMappings: [
+            {
+              externalId: 'google-oauth2|107406112376104028774',
+              email: 'amoore@atlassian.com',
+              updateSequenceNumber: baseUpdateSeq,
+              updatedAt: Date.now(),
+            },
+          ],
+        });
+        userMappingResults = mapResp?.results;
+        userMappingSuccess = mapResp?.success === true;
+        console.log('[importRequirements] mapUsers response', {
+          success: mapResp?.success,
+          resultsCount: Array.isArray(mapResp?.results) ? mapResp.results.length : 0,
+          error: mapResp?.error,
+        });
+        // Emit detailed logs for mapping outcomes
+        try {
+          if (Array.isArray(mapResp?.results)) {
+            for (const r of mapResp.results) {
+              if (r?.success) {
+                console.log('[importRequirements] mapUsers success', {
+                  externalId: r?.externalId,
+                  accountId: r?.accountId,
+                  email: r?.email,
+                });
+              } else {
+                console.warn('[importRequirements] mapUsers failure', {
+                  externalId: r?.externalId,
+                  error: r?.error,
+                });
+              }
+            }
+          } else if (mapResp?.results && typeof mapResp.results === 'object') {
+            const successes = Array.isArray(mapResp.results.success) ? mapResp.results.success : [];
+            const failures = Array.isArray(mapResp.results.failures) ? mapResp.results.failures : [];
+            for (const r of successes) {
               console.log('[importRequirements] mapUsers success', {
                 externalId: r?.externalId,
                 accountId: r?.accountId,
                 email: r?.email,
               });
-            } else {
+            }
+            for (const r of failures) {
               console.warn('[importRequirements] mapUsers failure', {
                 externalId: r?.externalId,
                 error: r?.error,
               });
             }
           }
-        } else if (mapResp?.results && typeof mapResp.results === 'object') {
-          const successes = Array.isArray(mapResp.results.success) ? mapResp.results.success : [];
-          const failures = Array.isArray(mapResp.results.failures) ? mapResp.results.failures : [];
-          for (const r of successes) {
-            console.log('[importRequirements] mapUsers success', {
-              externalId: r?.externalId,
-              accountId: r?.accountId,
-              email: r?.email,
-            });
-          }
-          for (const r of failures) {
-            console.warn('[importRequirements] mapUsers failure', {
-              externalId: r?.externalId,
-              error: r?.error,
-            });
-          }
+        } catch (logErr) {
+          console.error('[importRequirements] mapUsers detailed logging error', logErr?.message || logErr);
         }
-      } catch (logErr) {
-        console.error('[importRequirements] mapUsers detailed logging error', logErr?.message || logErr);
+      } catch (e) {
+        console.error('[importRequirements] setUsers error (non-fatal)', e?.message || e);
       }
-    } catch (e) {
-      console.error('[importRequirements] setUsers error (non-fatal)', e?.message || e);
+    } else {
+      console.log('[importRequirements] workspace flag set; skipping user ingestion and mapping');
     }
 
     console.log('[importRequirements] calling graph.setObjects, objects:', objects.length);
@@ -375,9 +384,17 @@ resolver.define('getUserByExternalId', async (req) => {
 
 resolver.define('deleteByProperties', async () => {
   try {
-    const request = { properties: { source: 'vitareq-forge' }, objectType: 'atlassian:work-item' };
-    console.log('[deleteByProperties] request', request);
-    const response = await graph.deleteObjectsByProperties(request);
+    const baseProps = { properties: { source: 'vitareq-forge' } };
+
+    // Delete work items
+    const workItemRequest = { ...baseProps, objectType: 'atlassian:work-item' };
+    console.log('[deleteByProperties] deleting work-items with', workItemRequest);
+    const workItemDelete = await graph.deleteObjectsByProperties(workItemRequest);
+
+    // Delete documents
+    const documentRequest = { ...baseProps, objectType: 'atlassian:document' };
+    console.log('[deleteByProperties] deleting documents with', documentRequest);
+    const documentDelete = await graph.deleteObjectsByProperties(documentRequest);
 
     // Attempt to also delete the default user by externalId
     let userDelete = undefined;
@@ -438,8 +455,12 @@ resolver.define('deleteByProperties', async () => {
       console.error('[deleteByProperties] user delete error (non-fatal)', e?.message || e);
     }
 
-    console.log('[deleteByProperties] response', { success: response?.success, error: response?.error });
-    return { ...response, userDelete };
+    console.log('[deleteByProperties] summary', {
+      workItems: { success: workItemDelete?.success, error: workItemDelete?.error },
+      documents: { success: documentDelete?.success, error: documentDelete?.error },
+      users: { success: userDelete?.success, error: userDelete?.error },
+    });
+    return { success: (workItemDelete?.success === true && documentDelete?.success === true), workItemDelete, documentDelete, userDelete };
   } catch (e) {
     console.error('[deleteByProperties] error', e?.message || e, e?.stack);
     return { success: false, error: e?.message || 'Delete failed' };
@@ -625,6 +646,107 @@ resolver.define('importUser', async () => {
   } catch (e) {
     console.error('[importUser] error', e?.message || e, e?.stack);
     return { success: false, error: e?.message || 'Failed to import user' };
+  }
+});
+
+resolver.define('importTestDoc', async () => {
+  try {
+    console.log('[importTestDoc] start');
+    const now = Date.now();
+    const doc = {
+      schemaVersion: '1.0',
+      id: 'VREQ-021',
+      updateSequenceNumber: 2,
+      displayName: '[VREQ-021] Shelf-life prediction using real-time sensor data',
+      url: 'https://vitareq.vercel.app/requirements/cmfxwi6800000jr0475qj46ck',
+      createdAt: '2024-04-20T14:20:00.000Z',
+      permissions: [
+        {
+          accessControls: [
+            {
+              principals: [
+                { type: 'ATLASSIAN_WORKSPACE' }
+              ]
+            }
+          ]
+        }
+      ],
+      lastUpdatedAt: '2024-04-21T08:10:00.000Z',
+      'atlassian:document': {
+        type: {
+          category: 'DOCUMENT',
+          mimeType: 'text/plain'
+        },
+        content: {
+          mimeType: 'text/plain',
+          text: `Omega-3 gummies are highly sensitive to both oxidation and environmental conditions such as temperature and humidity. Traditional stability studies provide useful but static results, often lagging behind real production timelines. By combining real-time data from warehouse sensors with lab assay results, the system can deliver more accurate, dynamic predictions of product shelf life. This ensures early detection of degradation trends and helps the quality team make faster, better-informed decisions.
+          The predictive capability will operate on a weekly cycle, ingesting the latest environmental readings (temperature, humidity) and chemical stability data (oxidation levels, potency assays). A regression or machine-learning model will generate updated shelf-life predictions, including confidence intervals. These results will be visible within VitaReq and linked Jira issues, so engineering and QA can track them alongside development and mitigation work.
+
+          This requirement is also critical for compliance and customer trust. Regulatory authorities increasingly expect proactive risk monitoring rather than reactive responses. Having predictive shelf-life data available in audit trails, regulatory dossiers, and Confluence pages strengthens Vitafleet’s ability to demonstrate product safety and stability. For the Omega-3 Gummies V2 launch, this capability is a cornerstone of the broader goal to reduce recall risk by 50% before market release.`
+        }
+      }
+    };
+
+    const response = await graph.setObjects({
+      objects: [doc],
+      properties: { source: 'vitareq-forge', timestamp: String(now) },
+    });
+
+    console.log('[importTestDoc] response', {
+      success: response?.success,
+      accepted: response?.results?.accepted?.length,
+      rejected: response?.results?.rejected?.length,
+      error: response?.error,
+    });
+
+    return { success: response?.success === true, results: response?.results, objects: [doc] };
+  } catch (e) {
+    console.error('[importTestDoc] error', e?.message || e, e?.stack);
+    return { success: false, error: e?.message || 'Failed to import test document' };
+  }
+});
+
+resolver.define('importTestWorkItem', async () => {
+  try {
+    console.log('[importTestWorkItem] start');
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const updateSeq = Date.now();
+    const obj = {
+      schemaVersion: '2.0',
+      id: 'VREQ-022',
+      updateSequenceNumber: updateSeq,
+      displayName: '[VREQ-022] Fix login issue',
+      description: 'Fix login issue to allow users to access the application',
+      url: 'https://vitareq.vercel.app/requirements/cmfxwi6800000jr0475qj46ck',
+      createdAt: nowIso,
+      lastUpdatedAt: nowIso,
+      permissions: [
+        { accessControls: [ { principals: [ { type: 'ATLASSIAN_WORKSPACE' } ] } ] }
+      ],
+      'atlassian:work-item': {
+        status: 'OPEN',
+        subtype: 'TASK'
+      }
+    };
+
+    // Call the graph.setObjects API to import the work item object
+    const response = await graph.setObjects({
+      objects: [obj],
+      properties: { source: 'vitareq-forge', timestamp: String(updateSeq) },
+    });
+
+    console.log('[importTestWorkItem] response', {
+      success: response?.success,
+      accepted: response?.results?.accepted?.length,
+      rejected: response?.results?.rejected?.length,
+      error: response?.error,
+    });
+
+    return { success: response?.success === true, results: response?.results, objects: [obj] };
+  } catch (e) {
+    console.error('[importTestWorkItem] error', e?.message || e, e?.stack);
+    return { success: false, error: e?.message || 'Failed to import test work item' };
   }
 });
 
