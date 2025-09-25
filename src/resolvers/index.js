@@ -216,6 +216,13 @@ resolver.define('importRequirements', async (req) => {
       };
     });
     console.log('[importRequirements] first object preview', objects[0]);
+    if (useWorkspacePermissions) {
+      try {
+        console.log('[importRequirements] first object JSON (workspace)', JSON.stringify(objects[0], null, 2));
+      } catch (_) {
+        // ignore stringify errors
+      }
+    }
     // Also ensure default user exists in Teamwork Graph (skip when workspace-level permissions are used)
     let userResults = undefined;
     let userMappingResults = undefined;
@@ -713,20 +720,28 @@ resolver.define('importTestWorkItem', async () => {
     const nowIso = now.toISOString();
     const updateSeq = Date.now();
     const obj = {
-      schemaVersion: '2.0',
-      id: 'VREQ-022',
-      updateSequenceNumber: updateSeq,
-      displayName: '[VREQ-022] Fix login issue',
-      description: 'Fix login issue to allow users to access the application',
-      url: 'https://vitareq.vercel.app/requirements/cmfxwi6800000jr0475qj46ck',
-      createdAt: nowIso,
-      lastUpdatedAt: nowIso,
-      permissions: [
-        { accessControls: [ { principals: [ { type: 'ATLASSIAN_WORKSPACE' } ] } ] }
-      ],
-      'atlassian:work-item': {
-        status: 'OPEN',
-        subtype: 'TASK'
+      "schemaVersion": "2.0",
+      "id": "cmfxwi6800000jr0475qj46ck",
+      "updateSequenceNumber": 1758762885147,
+      "displayName": "Shelf-life prediction using real-time sensor data",
+      "url": "https://vitareq.vercel.app/api/requirements/cmfxwi6800000jr0475qj46ck",
+      "createdAt": "2025-09-25T01:14:45.145Z",
+      "lastUpdatedAt": "2025-09-25T01:14:45.145Z",
+      "description": "Omega-3 gummies are highly sensitive to both oxidation and environmental conditions such as temperature and humidity. Traditional stability studies provide useful but static results, often lagging behind real production timelines. By combining real-time data from warehouse sensors with lab assay results, the system can deliver more accurate, dynamic predictions of product shelf life. This ensures early detection of degradation trends and helps the quality team make faster, better-informed decisions.\n\nThe predictive capability will operate on a weekly cycle, ingesting the latest environmental readings (temperature, humidity) and chemical stability data (oxidation levels, potency assays). A regression or machine-learning model will generate updated shelf-life predictions, including confidence intervals. These results will be visible within VitaReq and linked Jira issues, so engineering and QA can track them alongside development and mitigation work.\n\nThis requirement is also critical for compliance and customer trust. Regulatory authorities increasingly expect proactive risk monitoring rather than reactive responses. Having predictive shelf-life data available in audit trails, regulatory dossiers, and Confluence pages strengthens Vitafleet’s ability to demonstrate product safety and stability. For the Omega-3 Gummies V2 launch, this capability is a cornerstone of the broader goal to reduce recall risk by 50% before market release.",
+      "permissions": {
+        "accessControls": [
+          {
+            "principals": [
+              {
+                "type": "ATLASSIAN_WORKSPACE"
+              }
+            ]
+          }
+        ]
+      },
+      "atlassian:work-item": {
+        "subtype": "TASK",
+        "status": "TO_DO"
       }
     };
 
