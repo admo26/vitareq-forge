@@ -20,6 +20,7 @@ const AdminApp = () => {
   const [creds, setCreds] = useState(null);
   const [importingTestDoc, setImportingTestDoc] = useState(false);
   const [importingTestWorkItem, setImportingTestWorkItem] = useState(false);
+  const [importingUserBtn, setImportingUserBtn] = useState(false);
   const clearAllResults = () => {
     setResult(null);
     setLookup(null);
@@ -196,6 +197,19 @@ const AdminApp = () => {
     }
   };
 
+  const onImportUser = async () => {
+    setImportingUserBtn(true);
+    clearAllResults();
+    try {
+      const res = await invoke('importUser');
+      setResult(res);
+    } catch (e) {
+      setResult({ success: false, error: e?.message || 'Invocation failed' });
+    } finally {
+      setImportingUserBtn(false);
+    }
+  };
+
 
   useEffect(() => {
     (async () => {
@@ -295,6 +309,9 @@ const AdminApp = () => {
         <Button onClick={onImportTestWorkItem} isDisabled={importingTestWorkItem} appearance="primary">
           {importingTestWorkItem ? 'Importing…' : 'Import test work item'}
         </Button>
+        <Button onClick={onImportUser} isDisabled={importingUserBtn} appearance="primary">
+          {importingUserBtn ? 'Importing…' : 'Import user'}
+        </Button>
       </Inline>
       <Inline space="space.300" alignBlock="start" alignInline="start" shouldWrap={false}>
         <Stack space="space.100" alignInline="start">
@@ -325,11 +342,14 @@ const AdminApp = () => {
 
       {lookup && lookup.success && (
         <SectionMessage title="Lookup result" appearance="information">
-          {lookup.object ? (
-            <CodeBlock hasCopyButton={false} text={JSON.stringify(lookup.object, null, 2)} language="json" />
-          ) : (
-            <Text>No object returned</Text>
-          )}
+          {(() => {
+            const payload = lookupType === 'user' ? lookup?.user : lookup?.object;
+            return payload ? (
+              <CodeBlock hasCopyButton={false} text={JSON.stringify(payload, null, 2)} language="json" />
+            ) : (
+              <Text>No object returned</Text>
+            );
+          })()}
         </SectionMessage>
       )}
 

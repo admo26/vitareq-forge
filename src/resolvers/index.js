@@ -205,7 +205,15 @@ resolver.define('importRequirements', async (req) => {
         displayName: title,
         url,
         createdAt: nowIso,
+        createdBy: {
+          id: "123",
+          externalId: "google-oauth2|107406112376104028774"
+        },
         lastUpdatedAt: nowIso,
+        "lastUpdatedBy": {
+          "id": "123",
+          "externalId": "google-oauth2|107406112376104028774"
+        },
         description,
         permissions,
 
@@ -243,7 +251,7 @@ resolver.define('importRequirements', async (req) => {
             { value: 'amoore@atlassian.com', primary: true },
           ],
         };
-        const setUsersResp = await graph.setUsers({ users: [user] });
+        const setUsersResp = await graph.setUsers({ users: [user], connectionId: activeConnectionId });
         userResults = setUsersResp?.results;
         console.log('[importRequirements] setUsers response', {
           success: setUsersResp?.success,
@@ -263,6 +271,7 @@ resolver.define('importRequirements', async (req) => {
               updatedAt: Date.now(),
             },
           ],
+          connectionId: activeConnectionId,
         });
         userMappingResults = mapResp?.results;
         userMappingSuccess = mapResp?.success === true;
@@ -316,9 +325,11 @@ resolver.define('importRequirements', async (req) => {
     }
 
     console.log('[importRequirements] calling graph.setObjects, objects:', objects.length);
+    const activeConnectionId = await kvs.getSecret('vitareq:active:connectionId');
     const response = await graph.setObjects({
       objects,
       properties: { source: 'vitareq-forge', timestamp: String(baseUpdateSeq) },
+      connectionId: activeConnectionId,
     });
     console.log('[importRequirements] response', {
       success: response?.success,
@@ -642,14 +653,36 @@ resolver.define('importUser', async () => {
       ]
     };
     console.log('[importUser] calling graph.setUsers');
-    const response = await graph.setUsers({ users: [user] });
+    const activeConnectionId = await kvs.getSecret('vitareq:active:connectionId');
+    const response = await graph.setUsers({ users: [user], connectionId: activeConnectionId });
     console.log('[importUser] response', {
       success: response?.success,
       successCount: response?.results?.success?.length,
       failureCount: response?.results?.failures?.length,
       error: response?.error
     });
-    return response;
+
+    // Map the user to email for permissions/collaboration
+    console.log('[importUser] calling graph.mapUsers');
+    const nowSeq = Date.now();
+    const mapResp = await graph.mapUsers({
+      directMappings: [
+        {
+          externalId: 'google-oauth2|107406112376104028774',
+          email: 'amoore@atlassian.com',
+          updateSequenceNumber: nowSeq,
+          updatedAt: nowSeq,
+        },
+      ],
+      connectionId: activeConnectionId,
+    });
+    console.log('[importUser] mapUsers response', {
+      success: mapResp?.success,
+      resultsCount: Array.isArray(mapResp?.results) ? mapResp.results.length : 0,
+      error: mapResp?.error,
+    });
+
+    return { success: response?.success === true && mapResp?.success === true, setUsers: response, mapUsers: mapResp };
   } catch (e) {
     console.error('[importUser] error', e?.message || e, e?.stack);
     return { success: false, error: e?.message || 'Failed to import user' };
@@ -667,6 +700,12 @@ resolver.define('importTestDoc', async () => {
       displayName: '[VREQ-021] Shelf-life prediction using real-time sensor data',
       url: 'https://vitareq.vercel.app/requirements/cmfxwi6800000jr0475qj46ck',
       createdAt: '2024-04-20T14:20:00.000Z',
+      createdBy: {
+        email: 'amoore@atlassian.com',
+        externalId: 'google-oauth2|107406112376104028774',
+        accountId: '557058:5fde20db-758c-4b69-8196-36cca0ea7e08',
+        id: '123'
+      },
       permissions: [
         {
           accessControls: [
@@ -678,7 +717,7 @@ resolver.define('importTestDoc', async () => {
           ]
         }
       ],
-      lastUpdatedAt: '2024-04-21T08:10:00.000Z',
+      lastUpdatedAt: '2025-04-21T08:10:00.000Z',
       'atlassian:document': {
         type: {
           category: 'DOCUMENT',
@@ -694,9 +733,11 @@ resolver.define('importTestDoc', async () => {
       }
     };
 
+    const activeConnectionId = await kvs.getSecret('vitareq:active:connectionId');
     const response = await graph.setObjects({
       objects: [doc],
       properties: { source: 'vitareq-forge', timestamp: String(now) },
+      connectionId: activeConnectionId,
     });
 
     console.log('[importTestDoc] response', {
@@ -721,12 +762,20 @@ resolver.define('importTestWorkItem', async () => {
     const updateSeq = Date.now();
     const obj = {
       "schemaVersion": "2.0",
-      "id": "cmfxwi6800000jr0475qj46ck",
+      "id": "cmfxwi6800000jr0475qj46ckWI2",
       "updateSequenceNumber": 1758762885147,
       "displayName": "Shelf-life prediction using real-time sensor data",
       "url": "https://vitareq.vercel.app/api/requirements/cmfxwi6800000jr0475qj46ck",
       "createdAt": "2025-09-25T01:14:45.145Z",
+      "createdBy": {
+        "id": "123",
+        "externalId": "google-oauth2|107406112376104028774"
+      },
       "lastUpdatedAt": "2025-09-25T01:14:45.145Z",
+      "lastUpdatedBy": {
+        "id": "123",
+        "externalId": "google-oauth2|107406112376104028774"
+      },
       "description": "Omega-3 gummies are highly sensitive to both oxidation and environmental conditions such as temperature and humidity. Traditional stability studies provide useful but static results, often lagging behind real production timelines. By combining real-time data from warehouse sensors with lab assay results, the system can deliver more accurate, dynamic predictions of product shelf life. This ensures early detection of degradation trends and helps the quality team make faster, better-informed decisions.\n\nThe predictive capability will operate on a weekly cycle, ingesting the latest environmental readings (temperature, humidity) and chemical stability data (oxidation levels, potency assays). A regression or machine-learning model will generate updated shelf-life predictions, including confidence intervals. These results will be visible within VitaReq and linked Jira issues, so engineering and QA can track them alongside development and mitigation work.\n\nThis requirement is also critical for compliance and customer trust. Regulatory authorities increasingly expect proactive risk monitoring rather than reactive responses. Having predictive shelf-life data available in audit trails, regulatory dossiers, and Confluence pages strengthens Vitafleet’s ability to demonstrate product safety and stability. For the Omega-3 Gummies V2 launch, this capability is a cornerstone of the broader goal to reduce recall risk by 50% before market release.",
       "permissions": {
         "accessControls": [
@@ -746,9 +795,11 @@ resolver.define('importTestWorkItem', async () => {
     };
 
     // Call the graph.setObjects API to import the work item object
+    const activeConnectionId = await kvs.getSecret('vitareq:active:connectionId');
     const response = await graph.setObjects({
       objects: [obj],
       properties: { source: 'vitareq-forge', timestamp: String(updateSeq) },
+      connectionId: activeConnectionId,
     });
 
     console.log('[importTestWorkItem] response', {
